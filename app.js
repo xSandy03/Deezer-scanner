@@ -920,14 +920,17 @@ class AppController {
             }
         }
 
+        // Draw status immediately and keep drawing it
+        const drawStatusLoop = () => {
+            if (this.overlayCanvas && this.overlayCtx) {
+                this.drawDetectionStatus(0);
+            }
+            setTimeout(drawStatusLoop, 100); // Redraw every 100ms to ensure it stays visible
+        };
+        setTimeout(drawStatusLoop, 500);
+        
         // Start detection loop
         this.startDetection();
-        
-        // Draw status immediately
-        setTimeout(() => {
-            console.log('Drawing initial status, canvas:', this.overlayCanvas, 'ctx:', this.overlayCtx);
-            this.drawDetectionStatus(0);
-        }, 500);
     }
 
 
@@ -1045,12 +1048,19 @@ class AppController {
         this.overlayCtx.fillStyle = bgColor;
         this.overlayCtx.fillRect(rectX, rectY, rectWidth, rectHeight);
         
-        // Draw status text in white
+        // Draw status text in white with stroke for visibility
         this.overlayCtx.fillStyle = '#FFFFFF';
+        this.overlayCtx.strokeStyle = '#000000';
+        this.overlayCtx.lineWidth = 2;
+        this.overlayCtx.strokeText(statusText, x, y);
         this.overlayCtx.fillText(statusText, x, y);
         
-        console.log('Status drawn - bg at:', rectX, rectY, 'text at:', x, y, 'text:', statusText);
-        console.log('Background color:', bgColor, 'Text color: white');
+        // Force canvas to update
+        this.overlayCanvas.style.display = 'block';
+        this.overlayCanvas.style.visibility = 'visible';
+        this.overlayCanvas.style.opacity = '1';
+        
+        console.log('Status drawn - bg at:', rectX, rectY, rectWidth, 'x', rectHeight, 'text at:', x, y, 'text:', statusText);
     }
 
     /**
