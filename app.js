@@ -430,6 +430,16 @@ class AppController {
         
         this.video = document.getElementById('videoElement');
         this.canvas = document.getElementById('canvasElement');
+        
+        if (!this.video) {
+            console.error('Video element not found!');
+            return;
+        }
+        if (!this.canvas) {
+            console.error('Canvas element not found!');
+            return;
+        }
+        
         this.ctx = this.canvas.getContext('2d');
         
         this.isDetecting = false;
@@ -454,16 +464,24 @@ class AppController {
     }
 
     async startApp() {
+        console.log('startApp called, MOCK_MODE:', CONFIG.MOCK_MODE);
+        
         // Hide start overlay
         const startOverlay = document.getElementById('startOverlay');
         const app = document.getElementById('app');
         if (startOverlay) startOverlay.classList.add('hidden');
-        if (app) app.classList.remove('hidden');
+        if (app) {
+            app.classList.remove('hidden');
+            console.log('App container is now visible');
+        }
 
         // Start camera first (camera works independently of model)
         // Only request camera access after user explicitly clicks "Tap to Start"
         if (!CONFIG.MOCK_MODE) {
+            console.log('Starting camera...');
             await this.startCamera();
+        } else {
+            console.log('Skipping camera (MOCK_MODE is true)');
         }
 
         // Load model (optional - camera can work without it)
@@ -475,6 +493,12 @@ class AppController {
 
     async startCamera() {
         try {
+            // Check if getUserMedia is available
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                throw new Error('getUserMedia is not supported in this browser');
+            }
+
+            console.log('Requesting camera access...');
             const stream = await navigator.mediaDevices.getUserMedia({
                 video: {
                     facingMode: 'environment', // Rear camera
@@ -483,19 +507,33 @@ class AppController {
                 }
             });
 
+            console.log('Camera access granted, setting up video element...');
             this.video.srcObject = stream;
+            
+            // Ensure video is visible and playing
+            this.video.style.display = 'block';
             
             // Set canvas size to match video and play video
             this.video.addEventListener('loadedmetadata', () => {
+                console.log('Video metadata loaded, dimensions:', this.video.videoWidth, 'x', this.video.videoHeight);
                 this.canvas.width = this.video.videoWidth;
                 this.canvas.height = this.video.videoHeight;
-                // Only start playing video after stream is connected
-                this.video.play().catch(err => {
+                // Start playing video
+                this.video.play().then(() => {
+                    console.log('Video is playing');
+                }).catch(err => {
                     console.error('Video play error:', err);
                 });
             });
+
+            // Also try to play immediately
+            this.video.play().catch(err => {
+                console.log('Initial play attempt failed (expected), will retry after metadata loads');
+            });
+
         } catch (error) {
             console.error('Camera error:', error);
+            alert('Camera access denied or not available: ' + error.message);
             // Fall back to mock mode
             CONFIG.MOCK_MODE = true;
         }
