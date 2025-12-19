@@ -2,24 +2,96 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Emoji Scanner</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>CUBE AR - WebAR Experience</title>
+    
+    <!-- A-Frame -->
+    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+    
+    <!-- MindAR -->
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.3/dist/mindar-image-aframe.prod.js"></script>
+    
+    <!-- Styles -->
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <div class="video-container">
-        <video id="video" autoplay playsinline></video>
-        <canvas id="canvas" style="display: none;"></canvas>
-        <div id="roi-overlay" class="roi-overlay">
-            <div class="roi-box"></div>
+    <!-- Tap to Start Overlay -->
+    <div id="start-overlay" class="overlay">
+        <div class="overlay-content">
+            <h1>CUBE AR</h1>
+            <p class="instruction">Tap anywhere to start</p>
+            <p class="subtext">Point your camera at the cube targets</p>
         </div>
-        <div id="status" class="status">Loading...</div>
     </div>
 
-    <div id="errorMessage" class="error-message" style="display: none;"></div>
+    <!-- Main UI -->
+    <div id="ui" class="ui-container" style="display: none;">
+        <!-- Header -->
+        <header class="header">
+            <h1 class="brand">CUBE AR</h1>
+            <div class="header-controls">
+                <button id="help-btn" class="icon-btn" aria-label="Help">?</button>
+                <button id="debug-btn" class="icon-btn" aria-label="Debug">D</button>
+                <button id="mute-btn" class="icon-btn" aria-label="Mute/Unmute">🔊</button>
+            </div>
+        </header>
 
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8/dist/teachablemachine-image.min.js"></script>
+        <!-- Status Indicator -->
+        <div id="status" class="status-indicator">
+            <span id="status-text">Ready</span>
+            <span id="status-detail" class="status-detail"></span>
+        </div>
+    </div>
+
+    <!-- Help Modal -->
+    <div id="help-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>How to Use</h2>
+                <button id="close-help" class="close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <h3>Scanning Tips</h3>
+                <ul>
+                    <li>Ensure good lighting (avoid glare)</li>
+                    <li>Hold device 20-40cm from target</li>
+                    <li>Scan the cube faces clearly</li>
+                    <li>Keep targets steady for best tracking</li>
+                </ul>
+                <h3>Controls</h3>
+                <ul>
+                    <li><strong>Tap to Start:</strong> Begin AR experience</li>
+                    <li><strong>Mute/Unmute:</strong> Toggle audio playback</li>
+                    <li><strong>Help:</strong> View this guide</li>
+                    <li><strong>Debug:</strong> Show tracking visualization</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- A-Frame Scene -->
+    <a-scene 
+        id="scene"
+        mindar-image="imageTargetSrc: ./targets.mind; maxTrack: 12;"
+        vr-mode-ui="enabled: false"
+        device-orientation-permission-ui="enabled: false"
+        renderer="colorManagement: true; sortObjects: true;"
+        style="display: none;"
+    >
+        <!-- Camera -->
+        <a-camera 
+            id="camera"
+            position="0 0 0"
+            look-controls="enabled: false"
+            wasd-controls="enabled: false"
+        ></a-camera>
+
+        <!-- Dynamic targets will be created by app.js -->
+    </a-scene>
+
+    <!-- Scripts -->
     <script src="app.js"></script>
 </body>
 </html>
