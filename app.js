@@ -1007,15 +1007,15 @@ class AppController {
             return;
         }
 
-        // Always show the instruction message
+        // Always show "Move camera towards Mood Cubes" message
         const statusText = 'Move camera towards Mood Cubes';
         
-        // Use Deezer purple color (#A238FF)
-        const textColor = '#A238FF';
+        // Use Deezer purple color
+        const bgColor = 'rgba(162, 56, 255, 0.9)'; // #A238FF with transparency
         
-        // Draw status at bottom center of screen with transparent background
-        // Use Deezer-style font (similar to their branding)
-        this.overlayCtx.font = 'bold 24px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+        // Load Deezer font - need to wait for font to load
+        // Draw status at bottom center of screen
+        this.overlayCtx.font = 'bold 24px "DeezerProduct", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
         const textMetrics = this.overlayCtx.measureText(statusText);
         const textWidth = textMetrics.width;
         const textHeight = 28;
@@ -1023,15 +1023,15 @@ class AppController {
         const margin = 30;
         
         const x = (this.overlayCanvas.width - textWidth) / 2;
-        const y = this.overlayCanvas.height - margin;
+        const y = this.overlayCanvas.height - margin - textHeight;
         
-        // Draw subtle background rectangle (semi-transparent dark)
+        // Draw background rectangle
         const rectX = x - padding;
         const rectY = y - textHeight - padding;
         const rectWidth = textWidth + (padding * 2);
         const rectHeight = textHeight + (padding * 2);
         
-        this.overlayCtx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+        this.overlayCtx.fillStyle = bgColor;
         if (typeof this.overlayCtx.roundRect === 'function') {
             this.overlayCtx.roundRect(rectX, rectY, rectWidth, rectHeight, 12);
             this.overlayCtx.fill();
@@ -1039,8 +1039,8 @@ class AppController {
             this.overlayCtx.fillRect(rectX, rectY, rectWidth, rectHeight);
         }
         
-        // Draw status text in Deezer purple
-        this.overlayCtx.fillStyle = textColor;
+        // Draw status text in white
+        this.overlayCtx.fillStyle = '#FFFFFF';
         this.overlayCtx.fillText(statusText, x, y);
     }
 
