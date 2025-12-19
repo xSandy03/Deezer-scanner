@@ -1015,7 +1015,7 @@ class AppController {
         
         // Load Deezer font - need to wait for font to load
         // Draw status at bottom center of screen
-        this.overlayCtx.font = 'bold 24px "DeezerProduct", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+        this.overlayCtx.font = 'bold 24px "Deezer Product", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
         const textMetrics = this.overlayCtx.measureText(statusText);
         const textWidth = textMetrics.width;
         const textHeight = 28;

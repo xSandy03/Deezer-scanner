@@ -7,17 +7,17 @@
 
 /* Deezer Font Face */
 @font-face {
-    font-family: 'DeezerProduct';
+    font-family: 'Deezer Product';
     src: url('./deezer-corporate-typeface/DeezerProduct-Regular.woff2') format('woff2'),
          url('./deezer-corporate-typeface/DeezerProduct-Regular.woff') format('woff'),
          url('./deezer-corporate-typeface/DeezerProduct-Regular.ttf') format('truetype');
-    font-weight: 400;
+    font-weight: normal;
     font-style: normal;
     font-display: swap;
 }
 
 @font-face {
-    font-family: 'DeezerProduct';
+    font-family: 'Deezer Product';
     src: url('./deezer-corporate-typeface/DeezerProduct-Medium.woff2') format('woff2'),
          url('./deezer-corporate-typeface/DeezerProduct-Medium.woff') format('woff'),
          url('./deezer-corporate-typeface/DeezerProduct-Medium.ttf') format('truetype');
@@ -27,11 +27,11 @@
 }
 
 @font-face {
-    font-family: 'DeezerProduct';
+    font-family: 'Deezer Product';
     src: url('./deezer-corporate-typeface/DeezerProduct-Bold.woff2') format('woff2'),
          url('./deezer-corporate-typeface/DeezerProduct-Bold.woff') format('woff'),
          url('./deezer-corporate-typeface/DeezerProduct-Bold.ttf') format('truetype');
-    font-weight: 700;
+    font-weight: bold;
     font-style: normal;
     font-display: swap;
 }
