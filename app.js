@@ -685,6 +685,9 @@ class AppController {
             this.overlayCtx.lineWidth = 3;
             this.overlayCtx.strokeRect(x, y, width, height);
 
+            // Draw corner markers at the four edges/corners of the cube
+            this.drawCornerMarkers(x, y, width, height);
+
             // Draw label background
             const labelText = `${detection.label}`;
             const confidenceText = `${Math.round(detection.confidence * 100)}%`;
@@ -710,6 +713,72 @@ class AppController {
             this.overlayCtx.fillStyle = '#FFFFFF';
             this.overlayCtx.fillText(fullText, x, labelY + 20);
         });
+    }
+
+    /**
+     * Draw corner markers at the four corners of the bounding box
+     * Creates L-shaped corner indicators with a circle at each corner
+     * @param {number} x - Top-left x coordinate
+     * @param {number} y - Top-left y coordinate
+     * @param {number} width - Box width
+     * @param {number} height - Box height
+     */
+    drawCornerMarkers(x, y, width, height) {
+        const cornerLength = 25; // Length of corner lines (L-shape)
+        const markerRadius = 6; // Radius of corner circle
+        
+        this.overlayCtx.strokeStyle = '#A238FF'; // Purple color
+        this.overlayCtx.lineWidth = 4;
+        this.overlayCtx.fillStyle = '#A238FF';
+        this.overlayCtx.lineCap = 'round'; // Rounded line ends
+        
+        // Top-left corner
+        this.overlayCtx.beginPath();
+        this.overlayCtx.moveTo(x, y); // Start at corner
+        this.overlayCtx.lineTo(x + cornerLength, y); // Horizontal line
+        this.overlayCtx.moveTo(x, y); // Back to corner
+        this.overlayCtx.lineTo(x, y + cornerLength); // Vertical line
+        this.overlayCtx.stroke();
+        // Draw circle at corner
+        this.overlayCtx.beginPath();
+        this.overlayCtx.arc(x, y, markerRadius, 0, Math.PI * 2);
+        this.overlayCtx.fill();
+        
+        // Top-right corner
+        this.overlayCtx.beginPath();
+        this.overlayCtx.moveTo(x + width, y); // Start at corner
+        this.overlayCtx.lineTo(x + width - cornerLength, y); // Horizontal line
+        this.overlayCtx.moveTo(x + width, y); // Back to corner
+        this.overlayCtx.lineTo(x + width, y + cornerLength); // Vertical line
+        this.overlayCtx.stroke();
+        // Draw circle at corner
+        this.overlayCtx.beginPath();
+        this.overlayCtx.arc(x + width, y, markerRadius, 0, Math.PI * 2);
+        this.overlayCtx.fill();
+        
+        // Bottom-left corner
+        this.overlayCtx.beginPath();
+        this.overlayCtx.moveTo(x, y + height); // Start at corner
+        this.overlayCtx.lineTo(x + cornerLength, y + height); // Horizontal line
+        this.overlayCtx.moveTo(x, y + height); // Back to corner
+        this.overlayCtx.lineTo(x, y + height - cornerLength); // Vertical line
+        this.overlayCtx.stroke();
+        // Draw circle at corner
+        this.overlayCtx.beginPath();
+        this.overlayCtx.arc(x, y + height, markerRadius, 0, Math.PI * 2);
+        this.overlayCtx.fill();
+        
+        // Bottom-right corner
+        this.overlayCtx.beginPath();
+        this.overlayCtx.moveTo(x + width, y + height); // Start at corner
+        this.overlayCtx.lineTo(x + width - cornerLength, y + height); // Horizontal line
+        this.overlayCtx.moveTo(x + width, y + height); // Back to corner
+        this.overlayCtx.lineTo(x + width, y + height - cornerLength); // Vertical line
+        this.overlayCtx.stroke();
+        // Draw circle at corner
+        this.overlayCtx.beginPath();
+        this.overlayCtx.arc(x + width, y + height, markerRadius, 0, Math.PI * 2);
+        this.overlayCtx.fill();
     }
 
 }
