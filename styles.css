@@ -257,7 +257,7 @@ body video,
 /* Floating Transparent Media Player Bar */
 .media-player-bar {
     position: fixed;
-    bottom: 20px;
+    bottom: 100px; /* Positioned above the status message */
     left: 50%;
     transform: translateX(-50%);
     width: calc(100% - 40px);
@@ -381,7 +381,7 @@ body video,
     }
     
     .media-player-bar {
-        bottom: 10px;
+        bottom: 80px; /* Positioned above status message on mobile */
         width: calc(100% - 20px);
         padding: 15px;
         border-radius: 15px;

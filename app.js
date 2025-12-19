@@ -529,6 +529,13 @@ class MusicPlayer {
         this.audio.src = track.src;
         this.updateTrackInfo(track.title, track.artist);
         
+        // Load metadata to get duration
+        this.audio.addEventListener('loadedmetadata', () => {
+            if (window.appController) {
+                window.appController.updateMediaPlayerUI();
+            }
+        }, { once: true });
+        
         if (this.isPlaying) {
             this.play();
         }
