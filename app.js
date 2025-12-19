@@ -985,10 +985,8 @@ class AppController {
                     this.musicPlayer.switchPlaylist(comboKey);
                 }
             } else {
-                // Clear overlay if no detections (but keep status)
-                this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
-                // Draw status showing no detections
-                this.drawDetectionStatus(0);
+                // Draw status showing no detections (function handles clearing)
+                this.drawMindARDetections([], 0);
             }
         }
 
