@@ -173,12 +173,23 @@ class EmojiModelAdapter {
                 this.setupMindAREvents();
                 console.log('✓ Event listeners set up');
 
-                console.log('Step 7: MindAR will auto-start when camera is ready...');
-                // MindAR automatically starts when the scene is visible and camera is ready
-                // No need to manually call start()
-                console.log('✓ MindAR ready - tracking will start automatically');
+                console.log('Step 7: Starting MindAR tracking...');
+                // Try to start MindAR explicitly
+                try {
+                    if (typeof this.mindarSystem.start === 'function') {
+                        console.log('Calling mindarSystem.start()...');
+                        await this.mindarSystem.start();
+                        console.log('✓ MindAR started');
+                    } else {
+                        console.log('start() method not available, waiting for auto-start...');
+                        // Wait a bit for auto-initialization
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                    }
+                } catch (startError) {
+                    console.warn('Error starting MindAR (may auto-start anyway):', startError.message);
+                }
             } else {
-                console.log('Skipping MindAR setup - system not available');
+                console.log('Skipping MindAR setup - system not available, but scene should still show camera');
             }
 
             this.isLoaded = true;
