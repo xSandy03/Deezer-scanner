@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MindAR Minimal Test</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+        }
+        a-scene {
+            width: 100vw;
+            height: 100vh;
+        }
+    </style>
+    
+    <!-- MindAR Base (must load before A-Frame) -->
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.1.4/dist/mindar-image.prod.js"></script>
+    <!-- A-Frame -->
+    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+    <!-- MindAR A-Frame Integration -->
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.1.4/dist/mindar-image-aframe.prod.js"></script>
+</head>
+<body>
+    <!-- A-Frame Scene with MindAR -->
+    <a-scene 
+        id="arScene"
+        mindar-image="imageTargetSrc: ./targets.mind; maxTrack: 1; uiScanning: true; uiLoading: true;"
+        vr-mode-ui="enabled: false"
+        device-orientation-permission-ui="enabled: false"
+        renderer="colorManagement: true; antialias: true;"
+        embedded
+        style="width: 100vw; height: 100vh; position: fixed; top: 0; left: 0;"
+    >
+        <a-camera 
+            position="0 0 0"
+            look-controls="enabled: false"
+            wasd-controls="enabled: false"
+        ></a-camera>
+        
+        <!-- Target entity for index 0 -->
+        <a-mindar-image-target 
+            id="target-0"
+            targetIndex="0"
+        >
+            <!-- Purple box - visible when target is found -->
+            <a-box
+                id="detection-box"
+                position="0 0.3 0"
+                width="0.5"
+                height="0.5"
+                depth="0.5"
+                color="#A238FF"
+                visible="false"
+            ></a-box>
+            
+            <!-- White text "DETECTED" - visible when target is found -->
+            <a-text
+                id="detection-text"
+                value="DETECTED"
+                align="center"
+                color="#FFFFFF"
+                position="0 0.8 0"
+                scale="2 2 2"
+                look-at="[camera]"
+                visible="false"
+            ></a-text>
+        </a-mindar-image-target>
+    </a-scene>
+
+    <script>
+        // Wait for A-Frame to be ready
+        document.addEventListener('DOMContentLoaded', () => {
+            const scene = document.getElementById('arScene');
+            const target = document.getElementById('target-0');
+            const box = document.getElementById('detection-box');
+            const text = document.getElementById('detection-text');
+            
+            console.log('MindAR Minimal Test - Initializing...');
+            console.log('Scene element:', scene);
+            console.log('Target element:', target);
+            
+            // Listen for arReady event
+            scene.addEventListener('arReady', () => {
+                console.log('✓ arReady event fired - MindAR is ready');
+            });
+            
+            // Listen for arError event
+            scene.addEventListener('arError', (event) => {
+                console.error('❌ arError event:', event.detail);
+            });
+            
+            // Listen for targetFound event
+            target.addEventListener('targetFound', () => {
+                console.log('🎯 targetFound event fired for target 0');
+                box.setAttribute('visible', true);
+                text.setAttribute('visible', true);
+            });
+            
+            // Listen for targetLost event
+            target.addEventListener('targetLost', () => {
+                console.log('❌ targetLost event fired for target 0');
+                box.setAttribute('visible', false);
+                text.setAttribute('visible', false);
+            });
+            
+            console.log('Event listeners attached. Point camera at target 0.');
+        });
+    </script>
+</body>
+</html>
