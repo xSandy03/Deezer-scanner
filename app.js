@@ -210,22 +210,45 @@ class EmojiModelAdapter {
     setupMindAREvents() {
         console.log('Setting up MindAR event listeners...');
         
-        // Listen for arReady event
+        // Listen for arReady event (fires when camera is ready)
         this.scene.addEventListener('arReady', () => {
-            console.log('✓ MindAR ready event fired, setting up target listeners');
+            console.log('✓ MindAR arReady event fired - camera should be active');
             this.setupTargetEntities();
         });
         
-        // Also listen for arError event
+        // Listen for arError event
         this.scene.addEventListener('arError', (event) => {
             console.error('❌ MindAR error:', event.detail);
         });
         
-        // Create target entities immediately if scene is already ready
-        if (this.mindarSystem && this.mindarSystem.el) {
-            console.log('MindAR system already available, setting up targets now');
+        // Listen for renderstart to know when camera might be ready
+        this.scene.addEventListener('renderstart', () => {
+            console.log('Scene render started');
+        });
+        
+        // Check if camera video element exists (MindAR creates it)
+        const checkCamera = () => {
+            const video = this.scene.querySelector('video');
+            if (video) {
+                console.log('✓ Camera video element found:', {
+                    readyState: video.readyState,
+                    videoWidth: video.videoWidth,
+                    videoHeight: video.videoHeight,
+                    playing: !video.paused
+                });
+            } else {
+                console.log('Camera video element not found yet');
+            }
+        };
+        
+        // Check immediately and after a delay
+        setTimeout(checkCamera, 500);
+        setTimeout(checkCamera, 2000);
+        
+        // Create target entities after arReady
+        this.scene.addEventListener('arReady', () => {
             this.setupTargetEntities();
-        }
+        }, { once: true });
     }
     
     setupTargetEntities() {
