@@ -19,16 +19,29 @@
 
     <!-- Main App Container - Fullscreen Camera Only -->
     <div id="app" class="app-container hidden">
-        <!-- Camera Preview - Fullscreen -->
-        <video id="videoElement" playsinline muted autoplay></video>
-        <canvas id="canvasElement" class="hidden"></canvas>
+        <!-- A-Frame Scene with MindAR -->
+        <a-scene 
+            id="arScene"
+            mindar-image="imageTargetSrc: ./targets.mind; maxTrack: 12;"
+            vr-mode-ui="enabled: false"
+            device-orientation-permission-ui="enabled: false"
+            renderer="colorManagement: true; sortObjects: true;"
+            embedded
+        >
+            <a-camera 
+                id="arCamera"
+                position="0 0 0"
+                look-controls="enabled: false"
+                wasd-controls="enabled: false"
+            ></a-camera>
+        </a-scene>
         <canvas id="overlayCanvas"></canvas>
     </div>
 
-    <!-- TensorFlow.js -->
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
-    <!-- COCO-SSD Model -->
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3"></script>
+    <!-- A-Frame -->
+    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+    <!-- MindAR -->
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.3/dist/mindar-image-aframe.prod.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

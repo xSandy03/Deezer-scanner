@@ -6,9 +6,7 @@
 const CONFIG = {
     CONFIDENCE_THRESHOLD: 0.75,
     SMOOTHING_FRAMES: 8, // Number of consecutive frames required for stable detection
-    DETECTION_FPS: 10, // Frames per second for detection (throttled)
-    LOW_POWER_FPS: 5, // FPS when low power mode is enabled
-    MODEL_PATH: './emoji-model/model.json', // Path to TensorFlow.js model
+    TARGETS_FILE: './targets.mind', // MindAR targets file
     MOCK_MODE: false, // Set to true for testing without camera
 };
 
@@ -49,18 +47,20 @@ const COMBO_PLAYLISTS = {
 };
 
 // ============================================================================
-// COCO-SSD Model Adapter for Object Detection
+// MindAR Image Tracking Adapter
 // ============================================================================
 
 class EmojiModelAdapter {
     constructor() {
-        this.model = null;
+        this.scene = null;
+        this.mindarSystem = null;
         this.isLoaded = false;
         this.emojiLabels = EMOJI_LABELS; // Use labels from config
+        this.detectedTargets = new Map(); // Track detected targets by targetIndex
     }
 
     /**
-     * Load COCO-SSD pre-trained model for object detection
+     * Load MindAR scene and start tracking
      */
     async loadModel() {
         try {
@@ -70,97 +70,95 @@ class EmojiModelAdapter {
                 return true;
             }
 
-            // Check if cocoSsd is available
-            if (typeof cocoSsd === 'undefined') {
-                console.error('COCO-SSD library not found! Make sure the script tag is loaded.');
-                throw new Error('COCO-SSD model not loaded. Check script tag.');
+            // Wait for A-Frame to be ready
+            if (typeof AFRAME === 'undefined') {
+                throw new Error('A-Frame not loaded. Make sure script tag is present.');
             }
 
-            // Load COCO-SSD model
-            console.log('Loading COCO-SSD model...');
-            this.model = await cocoSsd.load({
-                base: 'mobilenet_v2'
+            await new Promise(resolve => {
+                if (document.readyState === 'complete') {
+                    resolve();
+                } else {
+                    window.addEventListener('load', resolve);
+                }
             });
+
+            const sceneEl = document.getElementById('arScene');
+            if (!sceneEl) {
+                throw new Error('AR scene element not found');
+            }
+
+            this.scene = sceneEl;
+            
+            // Wait for scene to be ready
+            await new Promise(resolve => {
+                if (this.scene.hasLoaded) {
+                    resolve();
+                } else {
+                    this.scene.addEventListener('loaded', resolve);
+                }
+            });
+
+            // Get MindAR system
+            this.mindarSystem = this.scene.systems['mindar-image-system'];
+            if (!this.mindarSystem) {
+                throw new Error('MindAR system not found. Check targets.mind file path.');
+            }
+
+            // Set up event listeners for target detection
+            this.setupMindAREvents();
+
             this.isLoaded = true;
-            console.log('COCO-SSD model loaded successfully');
+            console.log('MindAR loaded successfully');
             
             return true;
         } catch (error) {
-            console.error('Error loading COCO-SSD model:', error);
-            console.log('Continuing without model (will not detect)');
+            console.error('Error loading MindAR:', error);
             this.isLoaded = false;
             return false;
         }
     }
 
-
     /**
-     * Predict cube-like objects using COCO-SSD and return bounding boxes
-     * @param {HTMLImageElement|ImageData|HTMLCanvasElement} image - Input image
-     * @param {number} imageWidth - Original image width
-     * @param {number} imageHeight - Original image height
-     * @returns {Array<{label: string, confidence: number, bbox: {x: number, y: number, width: number, height: number}}>} Detections with bounding boxes
+     * Set up MindAR event listeners for target tracking
      */
-    async predict(image, imageWidth, imageHeight) {
-        if (!this.isLoaded || CONFIG.MOCK_MODE) {
-            // Mock predictions for testing
-            return this.mockPredict();
-        }
-
-        try {
-            // Run COCO-SSD detection
-            const detections = await this.model.detect(image);
-            console.log('COCO-SSD detections:', detections.length, 'objects detected');
+    setupMindAREvents() {
+        // Listen for target found events
+        this.scene.addEventListener('targetFound', (event) => {
+            const targetIndex = event.detail.targetIndex;
+            const label = this.emojiLabels[targetIndex] || `Target ${targetIndex}`;
+            console.log('Target found:', targetIndex, label);
             
-            if (detections.length === 0) {
-                console.log('No objects detected in frame');
-                return [];
-            }
-            
-            // Sort by confidence score and limit to top 2 highest confidence detections
-            const topDetections = detections
-                .sort((a, b) => b.score - a.score)
-                .slice(0, 2);
-            
-            console.log('Top 2 detections:', topDetections.map(d => ({ class: d.class, score: d.score })));
-            
-            // Map COCO-SSD detections to our format with emoji labels
-            // For now, we'll use the class name, but you can add classification later
-            const results = topDetections.map((detection, index) => {
-                // Convert COCO-SSD bbox format (x, y, width, height) to our format
-                const bbox = detection.bbox; // COCO-SSD bbox: [x, y, width, height]
-                
-                // Map detection to emoji label based on index or add classification logic here
-                // For now, we'll use the first emoji label as placeholder
-                // TODO: Add classification model to identify which emoji is on the cube
-                const emojiLabel = this.emojiLabels[index] || detection.class;
-                
-                return {
-                    label: emojiLabel,
-                    confidence: detection.score,
-                    bbox: {
-                        x: bbox[0], // x coordinate
-                        y: bbox[1], // y coordinate
-                        width: bbox[2], // width
-                        height: bbox[3] // height
-                    },
-                    className: detection.class // Store original COCO class for debugging
-                };
+            this.detectedTargets.set(targetIndex, {
+                targetIndex,
+                label,
+                confidence: 1.0, // MindAR doesn't provide confidence, assume 1.0 when found
+                found: true
             });
-            
-            return results;
-        } catch (error) {
-            console.error('Prediction error:', error);
-            return [];
-        }
+        });
+
+        // Listen for target lost events
+        this.scene.addEventListener('targetLost', (event) => {
+            const targetIndex = event.detail.targetIndex;
+            console.log('Target lost:', targetIndex);
+            this.detectedTargets.delete(targetIndex);
+        });
     }
 
     /**
-     * Mock predictions for testing without model
+     * Get current detections from MindAR
+     * @returns {Array<{label: string, confidence: number, targetIndex: number}>} Current detections
      */
-    mockPredict() {
-        // Return empty array - mock mode will use dropdown instead
-        return [];
+    getDetections() {
+        if (!this.isLoaded) {
+            return [];
+        }
+
+        // Return up to 2 detected targets
+        const detections = Array.from(this.detectedTargets.values())
+            .slice(0, 2);
+        
+        return detections;
     }
 
     /**
@@ -169,18 +167,6 @@ class EmojiModelAdapter {
      */
     setEmojiLabels(labels) {
         this.emojiLabels = labels;
-    }
-
-    /**
-     * Classify cropped region to determine which emoji is on the cube
-     * TODO: Add custom classification model here to identify emoji from cropped region
-     * @param {HTMLCanvasElement} croppedImage - Cropped region of detected object
-     * @returns {string} Emoji label
-     */
-    async classifyEmoji(croppedImage) {
-        // TODO: Implement custom emoji classification model
-        // For now, return default or use heuristics
-        return this.emojiLabels[0] || 'Unknown';
     }
 }
 
@@ -476,29 +462,16 @@ class AppController {
         this.detectionState = new DetectionState();
         this.musicPlayer = new MusicPlayer();
         
-        this.video = document.getElementById('videoElement');
-        this.canvas = document.getElementById('canvasElement');
         this.overlayCanvas = document.getElementById('overlayCanvas');
+        this.scene = null;
         
-        if (!this.video) {
-            console.error('Video element not found!');
-            return;
-        }
-        if (!this.canvas) {
-            console.error('Canvas element not found!');
-            return;
-        }
         if (!this.overlayCanvas) {
             console.error('Overlay canvas not found!');
             return;
         }
         
-        this.ctx = this.canvas.getContext('2d');
         this.overlayCtx = this.overlayCanvas.getContext('2d');
-        
         this.isDetecting = false;
-        this.lastDetectionTime = 0;
-        this.detectionInterval = 1000 / CONFIG.DETECTION_FPS;
         
         this.init();
     }
@@ -529,81 +502,21 @@ class AppController {
             console.log('App container is now visible');
         }
 
-        // Start camera first (camera works independently of model)
-        // Only request camera access after user explicitly clicks "Tap to Start"
-        if (!CONFIG.MOCK_MODE) {
-            console.log('Starting camera...');
-            await this.startCamera();
-        } else {
-            console.log('Skipping camera (MOCK_MODE is true)');
-        }
+        // Set overlay canvas size
+        this.overlayCanvas.width = window.innerWidth;
+        this.overlayCanvas.height = window.innerHeight;
 
-        // Load COCO-SSD model
-        await this.modelAdapter.loadModel();
-        
-        // Update emoji labels from config
-        this.modelAdapter.setEmojiLabels(EMOJI_LABELS);
+        // Load MindAR model (handles camera internally)
+        if (!CONFIG.MOCK_MODE) {
+            await this.modelAdapter.loadModel();
+            // Update emoji labels from config
+            this.modelAdapter.setEmojiLabels(EMOJI_LABELS);
+        }
 
         // Start detection loop
         this.startDetection();
     }
 
-    async startCamera() {
-        try {
-            // Check if getUserMedia is available
-            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                throw new Error('getUserMedia is not supported in this browser');
-            }
-
-            console.log('Requesting camera access...');
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: {
-                    facingMode: 'environment', // Rear camera
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 }
-                }
-            });
-
-            console.log('Camera access granted, setting up video element...');
-            this.video.srcObject = stream;
-            
-            // Ensure video is visible and playing
-            this.video.style.display = 'block';
-            
-            // Set canvas size to match video and play video
-            this.video.addEventListener('loadedmetadata', () => {
-                console.log('Video metadata loaded, dimensions:', this.video.videoWidth, 'x', this.video.videoHeight);
-                const videoWidth = this.video.videoWidth;
-                const videoHeight = this.video.videoHeight;
-                
-                // Set canvas dimensions
-                this.canvas.width = videoWidth;
-                this.canvas.height = videoHeight;
-                
-                // Set overlay canvas dimensions to match video display size
-                this.overlayCanvas.width = window.innerWidth;
-                this.overlayCanvas.height = window.innerHeight;
-                
-                // Start playing video
-                this.video.play().then(() => {
-                    console.log('Video is playing');
-                }).catch(err => {
-                    console.error('Video play error:', err);
-                });
-            });
-
-            // Also try to play immediately
-            this.video.play().catch(err => {
-                console.log('Initial play attempt failed (expected), will retry after metadata loads');
-            });
-
-        } catch (error) {
-            console.error('Camera error:', error);
-            alert('Camera access denied or not available: ' + error.message);
-            // Fall back to mock mode
-            CONFIG.MOCK_MODE = true;
-        }
-    }
 
     startDetection() {
         this.isDetecting = true;
@@ -613,42 +526,39 @@ class AppController {
     async detectionLoop() {
         if (!this.isDetecting) return;
 
-        const now = Date.now();
-        const shouldDetect = (now - this.lastDetectionTime) >= this.detectionInterval;
+        if (!CONFIG.MOCK_MODE) {
+            // Check if model is loaded
+            if (!this.modelAdapter.isLoaded) {
+                requestAnimationFrame(() => this.detectionLoop());
+                return;
+            }
 
-        if (shouldDetect) {
-            this.lastDetectionTime = now;
-
-            if (!CONFIG.MOCK_MODE) {
-                // Real detection
-                // Capture frame
-                this.ctx.drawImage(this.video, 0, 0, this.canvas.width, this.canvas.height);
+            // Get current detections from MindAR
+            const detections = this.modelAdapter.getDetections();
+            
+            if (detections.length > 0) {
+                console.log('MindAR detections:', detections.length);
                 
-                // Check if model is loaded
-                if (!this.modelAdapter.isLoaded) {
-                    console.log('Model not loaded yet, skipping detection');
-                } else {
-                    // Predict with bounding box support
-                    const predictions = await this.modelAdapter.predict(
-                        this.canvas, 
-                        this.canvas.width, 
-                        this.canvas.height
-                    );
-                    
-                    console.log('Predictions received:', predictions.length);
-                    
-                    // Draw bounding boxes and labels on overlay
-                    this.drawDetections(predictions);
-                    
-                    // Update state with smoothing (use top detection)
-                    const stateChanged = this.detectionState.update(predictions);
-                    
-                    if (stateChanged) {
-                        // Switch playlist if combo changed
-                        const comboKey = this.detectionState.getComboKey();
-                        this.musicPlayer.switchPlaylist(comboKey);
-                    }
+                // Convert to format expected by detection state
+                const predictions = detections.map(d => ({
+                    label: d.label,
+                    confidence: d.confidence
+                }));
+                
+                // Draw labels on overlay
+                this.drawMindARDetections(detections);
+                
+                // Update state with smoothing
+                const stateChanged = this.detectionState.update(predictions);
+                
+                if (stateChanged) {
+                    // Switch playlist if combo changed
+                    const comboKey = this.detectionState.getComboKey();
+                    this.musicPlayer.switchPlaylist(comboKey);
                 }
+            } else {
+                // Clear overlay if no detections
+                this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
             }
         }
 
@@ -656,12 +566,12 @@ class AppController {
     }
 
     /**
-     * Draw bounding boxes and labels for detected emojis
-     * @param {Array<{label: string, confidence: number, bbox: {x: number, y: number, width: number, height: number}}>} detections
+     * Draw labels for MindAR detected targets
+     * @param {Array<{label: string, confidence: number, targetIndex: number}>} detections
      */
-    drawDetections(detections) {
-        if (!this.overlayCanvas || !this.overlayCtx || !this.video) {
-            console.warn('Cannot draw detections: missing overlay canvas or video element');
+    drawMindARDetections(detections) {
+        if (!this.overlayCanvas || !this.overlayCtx) {
+            console.warn('Cannot draw detections: missing overlay canvas');
             return;
         }
 
@@ -671,79 +581,38 @@ class AppController {
             return;
         }
 
-        console.log('Drawing', detections.length, 'detections');
-
         // Clear previous drawings
         this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
 
-        // Calculate scale factors to map from video dimensions to display dimensions
-        const videoAspect = this.video.videoWidth / this.video.videoHeight;
-        const displayAspect = window.innerWidth / window.innerHeight;
-        
-        let displayWidth, displayHeight, offsetX, offsetY;
-        
-        if (videoAspect > displayAspect) {
-            // Video is wider - fit to height
-            displayHeight = window.innerHeight;
-            displayWidth = displayHeight * videoAspect;
-            offsetX = (window.innerWidth - displayWidth) / 2;
-            offsetY = 0;
-        } else {
-            // Video is taller - fit to width
-            displayWidth = window.innerWidth;
-            displayHeight = displayWidth / videoAspect;
-            offsetX = 0;
-            offsetY = (window.innerHeight - displayHeight) / 2;
-        }
-        
-        const scaleX = displayWidth / this.video.videoWidth;
-        const scaleY = displayHeight / this.video.videoHeight;
-
-        // Draw each detection
+        // Draw labels for each detection
+        // Position labels at top of screen, staggered for multiple detections
         detections.forEach((detection, index) => {
-            if (!detection.bbox) {
-                console.warn('Detection missing bbox:', detection);
-                return;
-            }
-
-            const bbox = detection.bbox;
-            
-            // Scale and offset bounding box coordinates
-            const x = (bbox.x * scaleX) + offsetX;
-            const y = (bbox.y * scaleY) + offsetY;
-            const width = bbox.width * scaleX;
-            const height = bbox.height * scaleY;
-
-            // Draw bounding box
-            this.overlayCtx.strokeStyle = '#A238FF'; // Purple color
-            this.overlayCtx.lineWidth = 3;
-            this.overlayCtx.strokeRect(x, y, width, height);
-
-            // Draw label background
             const labelText = `${detection.label}`;
             const confidenceText = `${Math.round(detection.confidence * 100)}%`;
-            const className = detection.className ? ` (${detection.className})` : '';
-            const fullText = `${labelText} ${confidenceText}${className}`;
+            const fullText = `${labelText} ${confidenceText}`;
             
-            this.overlayCtx.font = 'bold 24px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+            this.overlayCtx.font = 'bold 32px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
             const textMetrics = this.overlayCtx.measureText(fullText);
             const textWidth = textMetrics.width;
-            const textHeight = 30;
-            const padding = 10;
+            const textHeight = 40;
+            const padding = 15;
+            
+            // Position labels at top center, staggered
+            const x = (this.overlayCanvas.width - textWidth) / 2;
+            const y = 80 + (index * (textHeight + padding + 20));
             
             // Draw label background rectangle
-            const labelY = Math.max(y - textHeight - padding - 5, 0); // Position above box, or at top if too high
             this.overlayCtx.fillStyle = 'rgba(0, 0, 0, 0.8)';
             this.overlayCtx.fillRect(
                 x - padding,
-                labelY - padding,
+                y - textHeight - padding,
                 textWidth + (padding * 2),
-                textHeight + padding
+                textHeight + (padding * 2)
             );
 
             // Draw label text
             this.overlayCtx.fillStyle = '#FFFFFF';
-            this.overlayCtx.fillText(fullText, x, labelY + 20);
+            this.overlayCtx.fillText(fullText, x, y);
         });
     }
 
