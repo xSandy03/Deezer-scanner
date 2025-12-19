@@ -921,18 +921,31 @@ class AppController {
             const x = (this.overlayCanvas.width - textWidth) / 2;
             const y = 100 + (index * (textHeight + padding + 30));
             
-            // Draw label background rectangle with rounded corners effect
+            // Draw label background rectangle with rounded corners
             this.overlayCtx.fillStyle = 'rgba(162, 56, 255, 0.9)'; // Purple with transparency
-            // Draw rounded rectangle (approximation)
+            // Draw rounded rectangle (compatible method)
+            const rectX = x - padding;
+            const rectY = y - textHeight - padding;
+            const rectWidth = textWidth + (padding * 2);
+            const rectHeight = textHeight + (padding * 2);
+            
             this.overlayCtx.beginPath();
-            this.overlayCtx.roundRect(
-                x - padding,
-                y - textHeight - padding,
-                textWidth + (padding * 2),
-                textHeight + (padding * 2),
-                borderRadius
-            );
+            this.overlayCtx.moveTo(rectX + borderRadius, rectY);
+            this.overlayCtx.lineTo(rectX + rectWidth - borderRadius, rectY);
+            this.overlayCtx.quadraticCurveTo(rectX + rectWidth, rectY, rectX + rectWidth, rectY + borderRadius);
+            this.overlayCtx.lineTo(rectX + rectWidth, rectY + rectHeight - borderRadius);
+            this.overlayCtx.quadraticCurveTo(rectX + rectWidth, rectY + rectHeight, rectX + rectWidth - borderRadius, rectY + rectHeight);
+            this.overlayCtx.lineTo(rectX + borderRadius, rectY + rectHeight);
+            this.overlayCtx.quadraticCurveTo(rectX, rectY + rectHeight, rectX, rectY + rectHeight - borderRadius);
+            this.overlayCtx.lineTo(rectX, rectY + borderRadius);
+            this.overlayCtx.quadraticCurveTo(rectX, rectY, rectX + borderRadius, rectY);
+            this.overlayCtx.closePath();
             this.overlayCtx.fill();
+            
+            // Fallback: if rounded corners fail, just draw a regular rectangle
+            if (!this.overlayCtx.isPointInPath(rectX + rectWidth / 2, rectY + rectHeight / 2)) {
+                this.overlayCtx.fillRect(rectX, rectY, rectWidth, rectHeight);
+            }
             
             // Add subtle border
             this.overlayCtx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
