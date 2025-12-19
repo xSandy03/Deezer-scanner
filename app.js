@@ -172,6 +172,12 @@ class EmojiModelAdapter {
                 // Set up event listeners for target detection
                 this.setupMindAREvents();
                 console.log('✓ Event listeners set up');
+                
+                // Set up targets immediately after system is found
+                setTimeout(() => {
+                    console.log('Setting up target entities now that system is available...');
+                    this.setupTargetEntities();
+                }, 1000);
 
                 console.log('Step 7: Starting MindAR tracking...');
                 // Try to start MindAR explicitly
@@ -343,30 +349,49 @@ class EmojiModelAdapter {
         });
         
         // Set up a periodic check to see if any targets become visible
-        setInterval(() => {
-            const visibleTargets = [];
-            allTargets.forEach((targetEl) => {
-                const targetIndex = parseInt(targetEl.getAttribute('targetIndex'));
-                if (targetEl.object3D && targetEl.object3D.visible) {
-                    visibleTargets.push(targetIndex);
-                    // If target is visible but not in detectedTargets, add it
-                    if (!this.detectedTargets.has(targetIndex)) {
-                        const label = this.emojiLabels[targetIndex] || `Target ${targetIndex}`;
-                        console.log(`🔍 Auto-detected visible target: ${targetIndex} (${label})`);
-                        this.detectedTargets.set(targetIndex, {
-                            targetIndex,
-                            label,
-                            confidence: 0.85,
-                            found: true,
-                            timestamp: Date.now()
-                        });
+        // This is a fallback in case events don't fire properly
+        if (!this.visibilityCheckInterval) {
+            this.visibilityCheckInterval = setInterval(() => {
+                const visibleTargets = [];
+                const allTargetsNow = this.scene.querySelectorAll('a-mindar-image-target');
+                allTargetsNow.forEach((targetEl) => {
+                    const targetIndex = parseInt(targetEl.getAttribute('targetIndex'));
+                    const object3D = targetEl.object3D;
+                    if (object3D && object3D.visible) {
+                        // Check if target has meaningful position (not at origin)
+                        const hasRealPosition = object3D.position && 
+                            (Math.abs(object3D.position.x) > 0.001 || 
+                             Math.abs(object3D.position.y) > 0.001 || 
+                             Math.abs(object3D.position.z) > 0.001);
+                        
+                        if (hasRealPosition) {
+                            visibleTargets.push(targetIndex);
+                            // If target is visible but not in detectedTargets, add it
+                            if (!this.detectedTargets.has(targetIndex)) {
+                                const label = this.emojiLabels[targetIndex] || `Target ${targetIndex}`;
+                                console.log(`🔍 Auto-detected visible target: ${targetIndex} (${label})`, {
+                                    position: object3D.position
+                                });
+                                this.detectedTargets.set(targetIndex, {
+                                    targetIndex,
+                                    label,
+                                    confidence: 0.85,
+                                    found: true,
+                                    timestamp: Date.now()
+                                });
+                            }
+                        }
+                    } else if (object3D && !object3D.visible && this.detectedTargets.has(targetIndex)) {
+                        // Remove if no longer visible
+                        this.detectedTargets.delete(targetIndex);
+                        console.log(`Target ${targetIndex} no longer visible`);
                     }
+                });
+                if (visibleTargets.length > 0) {
+                    console.log('Currently visible targets:', visibleTargets);
                 }
-            });
-            if (visibleTargets.length > 0) {
-                console.log('Currently visible targets:', visibleTargets);
-            }
-        }, 1000); // Check every second
+            }, 500); // Check every 500ms for faster response
+        }
     }
 
     /**
@@ -381,10 +406,18 @@ class EmojiModelAdapter {
         // Also try to get detections directly from MindAR system if available
         if (this.mindarSystem && this.scene) {
             try {
-                // Check if MindAR has a tracked targets method
-                const trackedTargets = this.mindarSystem.controllers || [];
-                if (trackedTargets.length > 0) {
-                    console.log('MindAR tracked targets:', trackedTargets.length);
+                // Check MindAR system for tracked targets
+                if (this.mindarSystem.el && this.mindarSystem.el.systems) {
+                    // Try different ways to access tracked targets
+                    const mindarEl = this.scene.querySelector('[mindar-image]');
+                    if (mindarEl && mindarEl.components && mindarEl.components['mindar-image']) {
+                        const mindarComponent = mindarEl.components['mindar-image'];
+                        // Check if component has tracked targets
+                        if (mindarComponent.trackedTargets) {
+                            const tracked = mindarComponent.trackedTargets;
+                            console.log('MindAR tracked targets from component:', tracked);
+                        }
+                    }
                 }
             } catch (e) {
                 // Ignore errors
@@ -392,23 +425,38 @@ class EmojiModelAdapter {
             
             // Check all target entities to see their visibility/status
             const allTargets = this.scene.querySelectorAll('a-mindar-image-target');
-            allTargets.forEach((targetEl, index) => {
+            allTargets.forEach((targetEl) => {
                 const targetIndex = parseInt(targetEl.getAttribute('targetIndex'));
-                const isVisible = targetEl.getAttribute('visible');
                 const object3D = targetEl.object3D;
-                if (object3D && object3D.visible) {
-                    // Target is visible, might be detected
-                    if (!this.detectedTargets.has(targetIndex)) {
-                        const label = this.emojiLabels[targetIndex] || `Target ${targetIndex}`;
-                        console.log(`🔍 Target ${targetIndex} (${label}) appears to be visible in scene`);
-                        // Add it to detected targets as a fallback
-                        this.detectedTargets.set(targetIndex, {
-                            targetIndex,
-                            label,
-                            confidence: 0.9,
-                            found: true,
-                            timestamp: Date.now()
-                        });
+                
+                // Check if target is being tracked by checking its visibility and position
+                if (object3D) {
+                    const isVisible = object3D.visible;
+                    const hasPosition = object3D.position && (
+                        object3D.position.x !== 0 || 
+                        object3D.position.y !== 0 || 
+                        object3D.position.z !== 0
+                    );
+                    
+                    // If target is visible and has a position, it's likely being tracked
+                    if (isVisible && hasPosition) {
+                        if (!this.detectedTargets.has(targetIndex)) {
+                            const label = this.emojiLabels[targetIndex] || `Target ${targetIndex}`;
+                            console.log(`🔍 Target ${targetIndex} (${label}) detected via visibility check`, {
+                                visible: isVisible,
+                                position: object3D.position
+                            });
+                            this.detectedTargets.set(targetIndex, {
+                                targetIndex,
+                                label,
+                                confidence: 0.9,
+                                found: true,
+                                timestamp: Date.now()
+                            });
+                        }
+                    } else if (!isVisible && this.detectedTargets.has(targetIndex)) {
+                        // Target lost visibility
+                        this.detectedTargets.delete(targetIndex);
                     }
                 }
             });
