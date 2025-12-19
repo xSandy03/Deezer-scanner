@@ -608,29 +608,27 @@ class AppController {
     async startApp() {
         console.log('startApp called, MOCK_MODE:', CONFIG.MOCK_MODE);
         
-        // Hide start overlay and show app
+        // Step 1: Show app container FIRST (scene must be visible for camera)
         const startOverlay = document.getElementById('startOverlay');
         const app = document.getElementById('app');
         if (startOverlay) startOverlay.classList.add('hidden');
         if (app) {
             app.classList.remove('hidden');
             console.log('App container is now visible');
+            // Force reflow to ensure visibility
+            void app.offsetHeight;
         }
 
         // Set overlay canvas size
         this.overlayCanvas.width = window.innerWidth;
         this.overlayCanvas.height = window.innerHeight;
 
+        // Wait a moment for DOM to update and scene to become visible
+        await new Promise(resolve => setTimeout(resolve, 200));
+
         if (!CONFIG.MOCK_MODE) {
-            // Step 1: Show camera first - let A-Frame/MindAR handle camera initialization
-            // The scene will automatically request camera access when it becomes visible
-            console.log('Scene is visible, MindAR will initialize camera automatically...');
-            
-            // Wait for scene to be ready and camera to start
-            await new Promise(resolve => setTimeout(resolve, 500));
-            
-            // Step 2: Now initialize MindAR tracking
-            console.log('Loading MindAR tracking...');
+            // Step 2: Now initialize MindAR (scene is visible, so camera can be requested)
+            console.log('Loading MindAR tracking (scene is visible)...');
             const loaded = await this.modelAdapter.loadModel();
             if (loaded) {
                 console.log('MindAR model loaded successfully');
@@ -638,8 +636,8 @@ class AppController {
                 this.modelAdapter.setEmojiLabels(EMOJI_LABELS);
             } else {
                 console.error('Failed to load MindAR model');
-                // Don't block - camera is already showing
-                console.log('Continuing without AR tracking - camera should still work');
+                // Don't block - continue anyway
+                console.log('Continuing without AR tracking');
             }
         }
 
