@@ -217,6 +217,8 @@ body video,
     pointer-events: none;
     z-index: 100;
     display: block;
+    visibility: visible;
+    opacity: 1;
 }
 
 /* Mobile Optimizations */
