@@ -303,20 +303,65 @@ class EmojiModelAdapter {
     }
 
     /**
+     * Configure a single video element for mobile playback
+     */
+    configureVideoElement(video) {
+        // Set mobile-specific attributes
+        video.setAttribute('playsinline', 'true');
+        video.setAttribute('webkit-playsinline', 'true');
+        video.setAttribute('autoplay', 'true');
+        video.setAttribute('muted', 'true');
+        
+        // Ensure muted property is set (required for autoplay)
+        video.muted = true;
+        
+        // Ensure video is visible with inline styles (override any conflicting styles)
+        video.style.position = 'fixed';
+        video.style.top = '0';
+        video.style.left = '0';
+        video.style.width = '100vw';
+        video.style.height = '100vh';
+        video.style.objectFit = 'cover';
+        video.style.display = 'block';
+        video.style.visibility = 'visible';
+        video.style.opacity = '1';
+        video.style.zIndex = '0';
+        video.style.backgroundColor = 'transparent';
+        
+        // Force play the video
+        if (video.paused) {
+            const playPromise = video.play();
+            if (playPromise !== undefined) {
+                playPromise.then(() => {
+                    console.log('✓ Video is now playing');
+                }).catch(error => {
+                    console.warn('⚠ Could not autoplay video:', error);
+                });
+            }
+        }
+    }
+    
+    /**
      * Ensure video elements are properly configured and playing on mobile
      */
     ensureVideoPlayback() {
         console.log('Ensuring video playback for mobile...');
         
+        const processedVideos = new WeakSet();
+        
         const findAndFixVideo = () => {
-            // Find all video elements in the scene
-            const videos = this.scene.querySelectorAll('video');
+            // Find all video elements (including ones MindAR creates)
             const allVideos = document.querySelectorAll('video');
             
-            console.log(`Found ${videos.length} video(s) in scene, ${allVideos.length} total`);
+            console.log(`Found ${allVideos.length} video element(s)`);
             
-            // Process all video elements (including ones MindAR creates)
+            // Process all video elements
             allVideos.forEach((video, index) => {
+                // Skip if already processed
+                if (processedVideos.has(video)) {
+                    return;
+                }
+                
                 console.log(`Configuring video ${index}:`, {
                     id: video.id,
                     paused: video.paused,
@@ -324,56 +369,64 @@ class EmojiModelAdapter {
                     srcObject: !!video.srcObject,
                     playsinline: video.playsInline,
                     autoplay: video.autoplay,
-                    muted: video.muted
+                    muted: video.muted,
+                    width: video.videoWidth,
+                    height: video.videoHeight
                 });
                 
-                // Set mobile-specific attributes
-                video.setAttribute('playsinline', 'true');
-                video.setAttribute('webkit-playsinline', 'true');
-                video.setAttribute('autoplay', 'true');
-                video.setAttribute('muted', 'true');
-                
-                // Ensure muted property is set (required for autoplay)
-                video.muted = true;
-                
-                // Force play the video
-                const playPromise = video.play();
-                if (playPromise !== undefined) {
-                    playPromise.then(() => {
-                        console.log(`✓ Video ${index} is playing`);
-                    }).catch(error => {
-                        console.warn(`⚠ Could not autoplay video ${index}:`, error);
-                        // Try again after user interaction might have occurred
-                        setTimeout(() => {
-                            video.play().catch(e => console.warn(`Retry play failed:`, e));
-                        }, 500);
-                    });
-                }
-                
-                // Ensure video is visible
-                video.style.position = 'fixed';
-                video.style.top = '0';
-                video.style.left = '0';
-                video.style.width = '100vw';
-                video.style.height = '100vh';
-                video.style.objectFit = 'cover';
-                video.style.display = 'block';
-                video.style.visibility = 'visible';
-                video.style.opacity = '1';
-                video.style.zIndex = '0';
+                this.configureVideoElement(video);
+                processedVideos.add(video);
             });
         };
         
         // Try immediately and with delays (MindAR creates video elements asynchronously)
         findAndFixVideo();
+        setTimeout(findAndFixVideo, 300);
         setTimeout(findAndFixVideo, 500);
         setTimeout(findAndFixVideo, 1000);
         setTimeout(findAndFixVideo, 2000);
+        setTimeout(findAndFixVideo, 3000);
+        
+        // Watch for new video elements being added to DOM
+        const observer = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                mutation.addedNodes.forEach((node) => {
+                    if (node.nodeType === 1) { // Element node
+                        // Check if it's a video element
+                        if (node.tagName === 'VIDEO' && !processedVideos.has(node)) {
+                            console.log('New video element detected, configuring...');
+                            this.configureVideoElement(node);
+                            processedVideos.add(node);
+                        }
+                        // Check for video elements inside added nodes
+                        const videos = node.querySelectorAll ? node.querySelectorAll('video') : [];
+                        videos.forEach(video => {
+                            if (!processedVideos.has(video)) {
+                                console.log('New video element in subtree, configuring...');
+                                this.configureVideoElement(video);
+                                processedVideos.add(video);
+                            }
+                        });
+                    }
+                });
+            });
+        });
+        
+        // Observe the scene and document body for new video elements
+        if (this.scene) {
+            observer.observe(this.scene, { childList: true, subtree: true });
+        }
+        observer.observe(document.body, { childList: true, subtree: true });
         
         // Also listen for arReady to fix video when camera starts
         if (this.scene) {
             this.scene.addEventListener('arReady', () => {
                 console.log('arReady event - fixing video elements');
+                setTimeout(findAndFixVideo, 100);
+            });
+            
+            this.scene.addEventListener('renderstart', () => {
+                console.log('renderstart event - fixing video elements');
                 setTimeout(findAndFixVideo, 100);
             });
         }
