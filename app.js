@@ -218,9 +218,13 @@ class EmojiModelAdapter {
         // Listen for arReady event (fires when camera is ready)
         this.scene.addEventListener('arReady', () => {
             console.log('✓ MindAR arReady event fired - camera should be active');
+            console.log('MindAR system state:', this.mindarSystem);
             if (!targetsSetup) {
-                this.setupTargetEntities();
-                targetsSetup = true;
+                // Wait a bit for MindAR to fully initialize
+                setTimeout(() => {
+                    this.setupTargetEntities();
+                    targetsSetup = true;
+                }, 500);
             }
         }, { once: true });
         
@@ -283,7 +287,9 @@ class EmojiModelAdapter {
             
             // Listen for target found/lost events on each target entity
             targetEl.addEventListener('targetFound', (event) => {
-                console.log(`🎯 Target ${i} (${label}) FOUND!`, event);
+                console.log(`🎯🎯🎯 Target ${i} (${label}) FOUND!`, event);
+                console.log('Event detail:', event.detail);
+                console.log('Target element:', targetEl);
                 
                 this.detectedTargets.set(i, {
                     targetIndex: i,
@@ -293,13 +299,26 @@ class EmojiModelAdapter {
                     timestamp: Date.now()
                 });
                 
-                console.log('Current detected targets:', Array.from(this.detectedTargets.keys()));
+                console.log('Current detected targets map:', Array.from(this.detectedTargets.entries()));
+                console.log('Detected targets count:', this.detectedTargets.size);
             });
             
             targetEl.addEventListener('targetLost', (event) => {
-                console.log(`❌ Target ${i} (${label}) LOST`, event);
+                console.log(`❌❌❌ Target ${i} (${label}) LOST`, event);
                 this.detectedTargets.delete(i);
                 console.log('Remaining detected targets:', Array.from(this.detectedTargets.keys()));
+            });
+            
+            // Also listen on the scene for target events (some MindAR versions fire on scene)
+            this.scene.addEventListener(`targetFound-${i}`, () => {
+                console.log(`🎯 Scene event: Target ${i} (${label}) FOUND!`);
+                this.detectedTargets.set(i, {
+                    targetIndex: i,
+                    label,
+                    confidence: 1.0,
+                    found: true,
+                    timestamp: Date.now()
+                });
             });
             
             // Add to scene
@@ -323,9 +342,49 @@ class EmojiModelAdapter {
             return [];
         }
 
+        // Also try to get detections directly from MindAR system if available
+        if (this.mindarSystem && this.scene) {
+            try {
+                // Check if MindAR has a tracked targets method
+                const trackedTargets = this.mindarSystem.controllers || [];
+                if (trackedTargets.length > 0) {
+                    console.log('MindAR tracked targets:', trackedTargets.length);
+                }
+            } catch (e) {
+                // Ignore errors
+            }
+            
+            // Check all target entities to see their visibility/status
+            const allTargets = this.scene.querySelectorAll('a-mindar-image-target');
+            allTargets.forEach((targetEl, index) => {
+                const targetIndex = parseInt(targetEl.getAttribute('targetIndex'));
+                const isVisible = targetEl.getAttribute('visible');
+                const object3D = targetEl.object3D;
+                if (object3D && object3D.visible) {
+                    // Target is visible, might be detected
+                    if (!this.detectedTargets.has(targetIndex)) {
+                        const label = this.emojiLabels[targetIndex] || `Target ${targetIndex}`;
+                        console.log(`🔍 Target ${targetIndex} (${label}) appears to be visible in scene`);
+                        // Add it to detected targets as a fallback
+                        this.detectedTargets.set(targetIndex, {
+                            targetIndex,
+                            label,
+                            confidence: 0.9,
+                            found: true,
+                            timestamp: Date.now()
+                        });
+                    }
+                }
+            });
+        }
+
         // Return up to 2 detected targets
         const detections = Array.from(this.detectedTargets.values())
             .slice(0, 2);
+        
+        if (detections.length > 0) {
+            console.log('Returning detections:', detections.map(d => `${d.label} (${d.targetIndex})`));
+        }
         
         return detections;
     }
@@ -921,29 +980,19 @@ class AppController {
             const x = (this.overlayCanvas.width - textWidth) / 2;
             const y = 100 + (index * (textHeight + padding + 30));
             
-            // Draw label background rectangle with rounded corners
-            this.overlayCtx.fillStyle = 'rgba(162, 56, 255, 0.9)'; // Purple with transparency
-            // Draw rounded rectangle (compatible method)
+            // Draw label background rectangle
             const rectX = x - padding;
             const rectY = y - textHeight - padding;
             const rectWidth = textWidth + (padding * 2);
             const rectHeight = textHeight + (padding * 2);
             
-            this.overlayCtx.beginPath();
-            this.overlayCtx.moveTo(rectX + borderRadius, rectY);
-            this.overlayCtx.lineTo(rectX + rectWidth - borderRadius, rectY);
-            this.overlayCtx.quadraticCurveTo(rectX + rectWidth, rectY, rectX + rectWidth, rectY + borderRadius);
-            this.overlayCtx.lineTo(rectX + rectWidth, rectY + rectHeight - borderRadius);
-            this.overlayCtx.quadraticCurveTo(rectX + rectWidth, rectY + rectHeight, rectX + rectWidth - borderRadius, rectY + rectHeight);
-            this.overlayCtx.lineTo(rectX + borderRadius, rectY + rectHeight);
-            this.overlayCtx.quadraticCurveTo(rectX, rectY + rectHeight, rectX, rectY + rectHeight - borderRadius);
-            this.overlayCtx.lineTo(rectX, rectY + borderRadius);
-            this.overlayCtx.quadraticCurveTo(rectX, rectY, rectX + borderRadius, rectY);
-            this.overlayCtx.closePath();
-            this.overlayCtx.fill();
-            
-            // Fallback: if rounded corners fail, just draw a regular rectangle
-            if (!this.overlayCtx.isPointInPath(rectX + rectWidth / 2, rectY + rectHeight / 2)) {
+            // Use modern roundRect if available, otherwise use regular rectangle
+            this.overlayCtx.fillStyle = 'rgba(162, 56, 255, 0.9)'; // Purple with transparency
+            if (typeof this.overlayCtx.roundRect === 'function') {
+                this.overlayCtx.roundRect(rectX, rectY, rectWidth, rectHeight, borderRadius);
+                this.overlayCtx.fill();
+            } else {
+                // Fallback: simple rectangle
                 this.overlayCtx.fillRect(rectX, rectY, rectWidth, rectHeight);
             }
             
