@@ -92,11 +92,19 @@ class EmojiModelAdapter {
             const sceneEl = document.getElementById('arScene');
             if (!sceneEl) {
                 console.error('AR scene element not found in DOM!');
+                console.error('Available elements with id:', Array.from(document.querySelectorAll('[id]')).map(el => el.id));
                 throw new Error('AR scene element not found');
             }
             console.log('✓ AR scene element found');
+            console.log('Scene parent:', sceneEl.parentElement);
+            console.log('Scene visibility:', window.getComputedStyle(sceneEl.parentElement).display);
 
             this.scene = sceneEl;
+            
+            // Ensure scene is attached and visible
+            if (!this.scene.parentElement || this.scene.parentElement.classList.contains('hidden')) {
+                console.warn('Scene parent is hidden, this may cause initialization issues');
+            }
             
             console.log('Step 4: Waiting for scene to load...');
             // Wait for scene to be ready
@@ -121,27 +129,41 @@ class EmojiModelAdapter {
             console.log('✓ Scene is loaded');
 
             console.log('Step 5: Getting MindAR system...');
+            
+            // Check if mindar-image component is registered
+            if (!AFRAME.components['mindar-image-system']) {
+                console.error('mindar-image-system component not registered in AFRAME.components');
+                console.log('Available A-Frame components:', Object.keys(AFRAME.components).filter(k => k.includes('mindar')));
+                throw new Error('MindAR component not registered. Check script loading order.');
+            }
+            console.log('✓ MindAR component is registered');
+            
             // Wait longer for systems to register (MindAR can take a moment)
             let attempts = 0;
-            while (!this.mindarSystem && attempts < 20) {
+            while (!this.mindarSystem && attempts < 30) {
                 await new Promise(resolve => setTimeout(resolve, 100));
-                this.mindarSystem = this.scene.systems['mindar-image-system'];
+                // Try different system names
+                this.mindarSystem = this.scene.systems['mindar-image-system'] || 
+                                    this.scene.systems['mindar-image'] ||
+                                    this.scene.systems['mindar'];
                 attempts++;
-                if (!this.mindarSystem) {
-                    console.log(`Waiting for MindAR system... attempt ${attempts}/20`);
+                if (!this.mindarSystem && attempts % 5 === 0) {
+                    console.log(`Waiting for MindAR system... attempt ${attempts}/30`);
+                    console.log('Current systems:', Object.keys(this.scene.systems));
                 }
             }
             
             console.log('Available systems:', Object.keys(this.scene.systems));
             
             if (!this.mindarSystem) {
-                console.error('MindAR system not found after waiting');
+                console.error('MindAR system not found after waiting 3 seconds');
                 console.error('Available systems:', Object.keys(this.scene.systems));
                 console.error('Check that:');
-                console.error('1. MindAR script is loaded correctly');
+                console.error('1. MindAR scripts are loaded in correct order');
                 console.error('2. targets.mind file exists at:', CONFIG.TARGETS_FILE);
                 console.error('3. The mindar-image attribute is set correctly on a-scene');
-                throw new Error('MindAR system not found. Check targets.mind file path and script loading.');
+                console.error('4. Scene is visible (not in hidden container)');
+                throw new Error('MindAR system not found. Check console for details.');
             }
             console.log('✓ MindAR system found');
 
@@ -593,18 +615,23 @@ class AppController {
     async startApp() {
         console.log('startApp called, MOCK_MODE:', CONFIG.MOCK_MODE);
         
-        // Hide start overlay and show app
+        // Hide start overlay and show app FIRST (MindAR needs visible scene)
         const startOverlay = document.getElementById('startOverlay');
         const app = document.getElementById('app');
         if (startOverlay) startOverlay.classList.add('hidden');
         if (app) {
             app.classList.remove('hidden');
             console.log('App container is now visible');
+            // Force reflow to ensure visibility
+            app.offsetHeight;
         }
 
         // Set overlay canvas size
         this.overlayCanvas.width = window.innerWidth;
         this.overlayCanvas.height = window.innerHeight;
+
+        // Wait a moment for DOM to update
+        await new Promise(resolve => setTimeout(resolve, 100));
 
         // Load MindAR model (handles camera internally)
         if (!CONFIG.MOCK_MODE) {
@@ -617,6 +644,7 @@ class AppController {
             } else {
                 console.error('Failed to load MindAR model');
                 alert('Failed to load AR tracking. Please check console for errors.');
+                return; // Don't start detection if model failed
             }
         }
 
