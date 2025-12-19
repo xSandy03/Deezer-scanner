@@ -492,6 +492,17 @@ class AppController {
 
     async init() {
         this.setupEventListeners();
+        this.setupWindowResize();
+    }
+
+    setupWindowResize() {
+        // Update overlay canvas size when window resizes
+        window.addEventListener('resize', () => {
+            if (this.overlayCanvas) {
+                this.overlayCanvas.width = window.innerWidth;
+                this.overlayCanvas.height = window.innerHeight;
+            }
+        });
     }
 
     setupEventListeners() {
@@ -669,6 +680,11 @@ class AppController {
         const scaleY = displayHeight / this.video.videoHeight;
 
         // Draw each detection
+        if (detections.length === 0) {
+            // No detections - clear overlay
+            return;
+        }
+
         detections.forEach((detection, index) => {
             if (!detection.bbox) return;
 
@@ -724,13 +740,17 @@ class AppController {
      * @param {number} height - Box height
      */
     drawCornerMarkers(x, y, width, height) {
-        const cornerLength = 25; // Length of corner lines (L-shape)
-        const markerRadius = 6; // Radius of corner circle
+        if (!this.overlayCtx) return;
+        
+        const cornerLength = 40; // Length of corner lines (L-shape) - increased for visibility
+        const markerRadius = 8; // Radius of corner circle - increased for visibility
+        const lineWidth = 5; // Line width - increased for visibility
         
         this.overlayCtx.strokeStyle = '#A238FF'; // Purple color
-        this.overlayCtx.lineWidth = 4;
         this.overlayCtx.fillStyle = '#A238FF';
+        this.overlayCtx.lineWidth = lineWidth;
         this.overlayCtx.lineCap = 'round'; // Rounded line ends
+        this.overlayCtx.lineJoin = 'round';
         
         // Top-left corner
         this.overlayCtx.beginPath();
@@ -739,7 +759,7 @@ class AppController {
         this.overlayCtx.moveTo(x, y); // Back to corner
         this.overlayCtx.lineTo(x, y + cornerLength); // Vertical line
         this.overlayCtx.stroke();
-        // Draw circle at corner
+        // Draw filled circle at corner
         this.overlayCtx.beginPath();
         this.overlayCtx.arc(x, y, markerRadius, 0, Math.PI * 2);
         this.overlayCtx.fill();
@@ -751,7 +771,7 @@ class AppController {
         this.overlayCtx.moveTo(x + width, y); // Back to corner
         this.overlayCtx.lineTo(x + width, y + cornerLength); // Vertical line
         this.overlayCtx.stroke();
-        // Draw circle at corner
+        // Draw filled circle at corner
         this.overlayCtx.beginPath();
         this.overlayCtx.arc(x + width, y, markerRadius, 0, Math.PI * 2);
         this.overlayCtx.fill();
@@ -763,7 +783,7 @@ class AppController {
         this.overlayCtx.moveTo(x, y + height); // Back to corner
         this.overlayCtx.lineTo(x, y + height - cornerLength); // Vertical line
         this.overlayCtx.stroke();
-        // Draw circle at corner
+        // Draw filled circle at corner
         this.overlayCtx.beginPath();
         this.overlayCtx.arc(x, y + height, markerRadius, 0, Math.PI * 2);
         this.overlayCtx.fill();
@@ -775,7 +795,7 @@ class AppController {
         this.overlayCtx.moveTo(x + width, y + height); // Back to corner
         this.overlayCtx.lineTo(x + width, y + height - cornerLength); // Vertical line
         this.overlayCtx.stroke();
-        // Draw circle at corner
+        // Draw filled circle at corner
         this.overlayCtx.beginPath();
         this.overlayCtx.arc(x + width, y + height, markerRadius, 0, Math.PI * 2);
         this.overlayCtx.fill();
