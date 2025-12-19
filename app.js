@@ -12,6 +12,18 @@ const CONFIG = {
     MOCK_MODE: false, // Set to true for testing without camera
 };
 
+// Emoji Labels - Matching the images in /Emojis/Purple Cube/
+// Order matters: index 0 = first class, index 1 = second class, etc.
+// Update this to match your model's output class order
+const EMOJI_LABELS = [
+    'Chill',      // Class 0 - Chill.JPG
+    'Confused',   // Class 1 - Confused.JPG
+    'Dreamy',     // Class 2 - Dreamy.JPG
+    'Energy',     // Class 3 - Energy.JPG
+    'Happy',      // Class 4 - Happy.JPG
+    'Sad',        // Class 5 - Sad.JPG
+];
+
 // Playlist mapping: emoji combinations -> tracks
 // Normalize combos by sorting emojis alphabetically
 const COMBO_PLAYLISTS = {
@@ -45,27 +57,35 @@ class EmojiModelAdapter {
         this.model = null;
         this.isLoaded = false;
         this.inputSize = [224, 224]; // Default input size, adjust based on your model
+        this.emojiLabels = EMOJI_LABELS; // Use labels from config
     }
 
     /**
      * Load TensorFlow.js model from local files
-     * TODO: Replace this with your actual model loading logic
-     * Model should be exported from Teachable Machine or similar tool
+     * Supports both classification and object detection models
+     * Model should be exported from Teachable Machine, TensorFlow.js, or similar tool
      * Expected structure: /emoji-model/model.json and weight files
      */
     async loadModel() {
         try {
-            // TODO: Uncomment when model files are ready
-            // this.model = await tf.loadLayersModel(CONFIG.MODEL_PATH);
-            // this.isLoaded = true;
-            // console.log('Model loaded successfully');
+            if (CONFIG.MOCK_MODE) {
+                console.log('Model loading skipped (MOCK_MODE enabled)');
+                this.isLoaded = false;
+                return true;
+            }
+
+            // Load the model
+            this.model = await tf.loadLayersModel(CONFIG.MODEL_PATH);
+            this.isLoaded = true;
+            console.log('Model loaded successfully');
             
-            // For now, return mock success
-            console.log('Model loading skipped (mock mode)');
-            this.isLoaded = false;
+            // Log model structure for debugging
+            this.model.summary();
+            
             return true;
         } catch (error) {
             console.error('Error loading model:', error);
+            console.log('Continuing without model (will not detect)');
             this.isLoaded = false;
             return false;
         }
@@ -89,11 +109,13 @@ class EmojiModelAdapter {
     }
 
     /**
-     * Predict emojis from image
+     * Predict emojis from image with bounding box support
      * @param {HTMLImageElement|ImageData|HTMLCanvasElement} image - Input image
-     * @returns {Array<{label: string, confidence: number}>} Top predictions
+     * @param {number} imageWidth - Original image width
+     * @param {number} imageHeight - Original image height
+     * @returns {Array<{label: string, confidence: number, bbox?: {x: number, y: number, width: number, height: number}}>} Detections with bounding boxes
      */
-    async predict(image) {
+    async predict(image, imageWidth, imageHeight) {
         if (!this.isLoaded || CONFIG.MOCK_MODE) {
             // Mock predictions for testing
             return this.mockPredict();
@@ -104,15 +126,20 @@ class EmojiModelAdapter {
             const predictions = await this.model.predict(preprocessed);
             const data = await predictions.data();
             
-            // TODO: Map predictions to emoji labels
-            // This depends on your model's output structure
-            // Example: if model outputs class probabilities, map indices to emoji labels
-            const emojiLabels = ['😄', '😈', '🎵', '🔥', '❤️', '⭐']; // TODO: Replace with actual labels
-            
+            // Map predictions to emoji labels using stored labels
             const results = Array.from(data)
                 .map((confidence, index) => ({
-                    label: emojiLabels[index] || `Emoji${index}`,
-                    confidence: confidence
+                    label: this.emojiLabels[index] || `Emoji${index}`,
+                    confidence: confidence,
+                    // If your model provides bounding boxes, extract them here
+                    // For classification models: center the box in the image
+                    // For object detection models: extract bbox coordinates from model output
+                    bbox: {
+                        x: imageWidth * 0.25, // Center horizontally
+                        y: imageHeight * 0.25, // Center vertically
+                        width: imageWidth * 0.5, // 50% of image width
+                        height: imageHeight * 0.5 // 50% of image height
+                    }
                 }))
                 .sort((a, b) => b.confidence - a.confidence)
                 .filter(p => p.confidence >= CONFIG.CONFIDENCE_THRESHOLD);
@@ -133,6 +160,14 @@ class EmojiModelAdapter {
     mockPredict() {
         // Return empty array - mock mode will use dropdown instead
         return [];
+    }
+
+    /**
+     * Update emoji labels mapping - call this with your actual emoji names
+     * @param {Array<string>} labels - Array of emoji labels matching model output indices
+     */
+    setEmojiLabels(labels) {
+        this.emojiLabels = labels;
     }
 }
 
@@ -430,6 +465,7 @@ class AppController {
         
         this.video = document.getElementById('videoElement');
         this.canvas = document.getElementById('canvasElement');
+        this.overlayCanvas = document.getElementById('overlayCanvas');
         
         if (!this.video) {
             console.error('Video element not found!');
@@ -439,8 +475,13 @@ class AppController {
             console.error('Canvas element not found!');
             return;
         }
+        if (!this.overlayCanvas) {
+            console.error('Overlay canvas not found!');
+            return;
+        }
         
         this.ctx = this.canvas.getContext('2d');
+        this.overlayCtx = this.overlayCanvas.getContext('2d');
         
         this.isDetecting = false;
         this.lastDetectionTime = 0;
@@ -486,6 +527,9 @@ class AppController {
 
         // Load model (optional - camera can work without it)
         await this.modelAdapter.loadModel();
+        
+        // Update emoji labels from config
+        this.modelAdapter.setEmojiLabels(EMOJI_LABELS);
 
         // Start detection loop
         this.startDetection();
@@ -516,8 +560,17 @@ class AppController {
             // Set canvas size to match video and play video
             this.video.addEventListener('loadedmetadata', () => {
                 console.log('Video metadata loaded, dimensions:', this.video.videoWidth, 'x', this.video.videoHeight);
-                this.canvas.width = this.video.videoWidth;
-                this.canvas.height = this.video.videoHeight;
+                const videoWidth = this.video.videoWidth;
+                const videoHeight = this.video.videoHeight;
+                
+                // Set canvas dimensions
+                this.canvas.width = videoWidth;
+                this.canvas.height = videoHeight;
+                
+                // Set overlay canvas dimensions to match video display size
+                this.overlayCanvas.width = window.innerWidth;
+                this.overlayCanvas.height = window.innerHeight;
+                
                 // Start playing video
                 this.video.play().then(() => {
                     console.log('Video is playing');
@@ -558,10 +611,17 @@ class AppController {
                 // Capture frame
                 this.ctx.drawImage(this.video, 0, 0, this.canvas.width, this.canvas.height);
                 
-                // Predict
-                const predictions = await this.modelAdapter.predict(this.canvas);
+                // Predict with bounding box support
+                const predictions = await this.modelAdapter.predict(
+                    this.canvas, 
+                    this.canvas.width, 
+                    this.canvas.height
+                );
                 
-                // Update state with smoothing
+                // Draw bounding boxes and labels on overlay
+                this.drawDetections(predictions);
+                
+                // Update state with smoothing (use top detection)
                 const stateChanged = this.detectionState.update(predictions);
                 
                 if (stateChanged) {
@@ -575,6 +635,83 @@ class AppController {
         requestAnimationFrame(() => this.detectionLoop());
     }
 
+    /**
+     * Draw bounding boxes and labels for detected emojis
+     * @param {Array<{label: string, confidence: number, bbox: {x: number, y: number, width: number, height: number}}>} detections
+     */
+    drawDetections(detections) {
+        if (!this.overlayCanvas || !this.overlayCtx || !this.video) return;
+
+        // Clear previous drawings
+        this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
+
+        // Calculate scale factors to map from video dimensions to display dimensions
+        const videoAspect = this.video.videoWidth / this.video.videoHeight;
+        const displayAspect = window.innerWidth / window.innerHeight;
+        
+        let displayWidth, displayHeight, offsetX, offsetY;
+        
+        if (videoAspect > displayAspect) {
+            // Video is wider - fit to height
+            displayHeight = window.innerHeight;
+            displayWidth = displayHeight * videoAspect;
+            offsetX = (window.innerWidth - displayWidth) / 2;
+            offsetY = 0;
+        } else {
+            // Video is taller - fit to width
+            displayWidth = window.innerWidth;
+            displayHeight = displayWidth / videoAspect;
+            offsetX = 0;
+            offsetY = (window.innerHeight - displayHeight) / 2;
+        }
+        
+        const scaleX = displayWidth / this.video.videoWidth;
+        const scaleY = displayHeight / this.video.videoHeight;
+
+        // Draw each detection
+        detections.forEach((detection, index) => {
+            if (!detection.bbox) return;
+
+            const bbox = detection.bbox;
+            
+            // Scale and offset bounding box coordinates
+            const x = (bbox.x * scaleX) + offsetX;
+            const y = (bbox.y * scaleY) + offsetY;
+            const width = bbox.width * scaleX;
+            const height = bbox.height * scaleY;
+
+            // Draw bounding box
+            this.overlayCtx.strokeStyle = '#A238FF'; // Purple color
+            this.overlayCtx.lineWidth = 3;
+            this.overlayCtx.strokeRect(x, y, width, height);
+
+            // Draw label background
+            const labelText = `${detection.label}`;
+            const confidenceText = `${Math.round(detection.confidence * 100)}%`;
+            const fullText = `${labelText} ${confidenceText}`;
+            
+            this.overlayCtx.font = 'bold 24px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+            const textMetrics = this.overlayCtx.measureText(fullText);
+            const textWidth = textMetrics.width;
+            const textHeight = 30;
+            const padding = 10;
+            
+            // Draw label background rectangle
+            const labelY = Math.max(y - textHeight - padding - 5, 0); // Position above box, or at top if too high
+            this.overlayCtx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+            this.overlayCtx.fillRect(
+                x - padding,
+                labelY - padding,
+                textWidth + (padding * 2),
+                textHeight + padding
+            );
+
+            // Draw label text
+            this.overlayCtx.fillStyle = '#FFFFFF';
+            this.overlayCtx.fillText(fullText, x, labelY + 20);
+        });
+    }
+
 }
 
 // ============================================================================
@@ -586,3 +723,4 @@ let app;
 document.addEventListener('DOMContentLoaded', () => {
     app = new AppController();
 });
+

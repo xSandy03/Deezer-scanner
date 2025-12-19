@@ -102,9 +102,21 @@ body {
     height: 100vh;
 }
 
+/* Overlay Canvas for bounding boxes and labels */
+#overlayCanvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    pointer-events: none;
+    z-index: 10;
+}
+
 /* Mobile Optimizations */
 @media (max-width: 768px) {
     .overlay-content h1 {
         font-size: 1.5rem;
     }
 }
+
