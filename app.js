@@ -10,17 +10,16 @@ const CONFIG = {
     MOCK_MODE: false, // Set to true for testing without camera
 };
 
-// Emoji Labels - Matching the images in /Emojis/Purple Cube/
-// Order matters: index 0 = first class, index 1 = second class, etc.
-// Update this to match your model's output class order
-const EMOJI_LABELS = [
-    'Chill',      // Class 0 - Chill.JPG
-    'Confused',   // Class 1 - Confused.JPG
-    'Dreamy',     // Class 2 - Dreamy.JPG
-    'Energy',     // Class 3 - Energy.JPG
-    'Happy',      // Class 4 - Happy.JPG
-    'Sad',        // Class 5 - Sad.JPG
-];
+// Target Labels - Mapping target indices to display names
+// MindAR targets.mind file contains 6 image targets (indices 0-5)
+const TARGET_LABELS = {
+    0: "Chill",
+    1: "Confused",
+    2: "Dreamy",
+    3: "Energy",
+    4: "Happy",
+    5: "Sad"
+};
 
 // Playlist mapping: emoji combinations -> tracks
 // Normalize combos by sorting emojis alphabetically
@@ -55,8 +54,7 @@ class EmojiModelAdapter {
         this.scene = null;
         this.mindarSystem = null;
         this.isLoaded = false;
-        this.emojiLabels = EMOJI_LABELS; // Use labels from config
-        this.detectedTargets = new Map(); // Track detected targets by targetIndex
+        this.targetsCreated = false; // Track if targets have been created to prevent duplicates
     }
 
     /**
@@ -170,14 +168,9 @@ class EmojiModelAdapter {
             if (this.mindarSystem) {
                 console.log('Step 6: Setting up event listeners...');
                 // Set up event listeners for target detection
+                // Targets will be created inside arReady event handler
                 this.setupMindAREvents();
                 console.log('✓ Event listeners set up');
-                
-                // Set up targets immediately after system is found
-                setTimeout(() => {
-                    console.log('Setting up target entities now that system is available...');
-                    this.setupTargetEntities();
-                }, 1000);
 
                 console.log('Step 7: Starting MindAR tracking...');
                 // Try to start MindAR explicitly
@@ -212,272 +205,101 @@ class EmojiModelAdapter {
 
     /**
      * Set up MindAR event listeners for target tracking
+     * Targets are created only once, inside the arReady event handler
      */
     setupMindAREvents() {
         console.log('Setting up MindAR event listeners...');
         
-        let targetsSetup = false;
-        
         // Listen for arReady event (fires when camera is ready)
+        // This is the ONLY place where targets should be created
         this.scene.addEventListener('arReady', () => {
             console.log('✓ MindAR arReady event fired - camera should be active');
-            console.log('MindAR system state:', this.mindarSystem);
-            if (!targetsSetup) {
-                // Wait a bit for MindAR to fully initialize
-                setTimeout(() => {
-                    this.setupTargetEntities();
-                    targetsSetup = true;
-                }, 500);
+            
+            // Create target entities only once, inside arReady event
+            if (!this.targetsCreated) {
+                this.createTargetEntities();
+                this.targetsCreated = true;
             }
         }, { once: true });
-        
-        // Also listen for target events on the scene (some MindAR versions fire here)
-        for (let i = 0; i < this.emojiLabels.length; i++) {
-            const label = this.emojiLabels[i] || `Target ${i}`;
-            this.scene.addEventListener(`targetFound-${i}`, () => {
-                console.log(`🎯 Scene-level event: Target ${i} (${label}) FOUND!`);
-                this.detectedTargets.set(i, {
-                    targetIndex: i,
-                    label,
-                    confidence: 1.0,
-                    found: true,
-                    timestamp: Date.now()
-                });
-            });
-            
-            this.scene.addEventListener(`targetLost-${i}`, () => {
-                console.log(`❌ Scene-level event: Target ${i} (${label}) LOST`);
-                this.detectedTargets.delete(i);
-            });
-        }
         
         // Listen for arError event
         this.scene.addEventListener('arError', (event) => {
             console.error('❌ MindAR error:', event.detail);
         });
-        
-        // Listen for renderstart to know when camera might be ready
-        this.scene.addEventListener('renderstart', () => {
-            console.log('Scene render started');
-        });
-        
-        // Also try setting up targets if arReady hasn't fired after a delay
-        setTimeout(() => {
-            if (!targetsSetup && this.scene.hasLoaded) {
-                console.log('Setting up targets after delay (arReady may have already fired)');
-                this.setupTargetEntities();
-                targetsSetup = true;
-            }
-        }, 2000);
     }
     
-    setupTargetEntities() {
-        console.log('Creating target entities for', this.emojiLabels.length, 'targets');
+    /**
+     * Create exactly 6 mindar-image-target entities (indices 0-5)
+     * Each target gets a floating text label that appears above it when detected
+     * This function is called only once, inside the arReady event handler
+     */
+    createTargetEntities() {
+        console.log('Creating 6 target entities (indices 0-5) for MindAR tracking');
         
-        // Check if targets already exist
+        // Verify no targets exist yet (safety check)
         const existingTargets = this.scene.querySelectorAll('a-mindar-image-target');
         if (existingTargets.length > 0) {
-            console.log('Target entities already exist, removing old ones');
+            console.warn('Target entities already exist! Removing duplicates.');
             existingTargets.forEach(el => el.remove());
         }
         
-        // Create target entities for each emoji (0-5 for 6 emojis)
-        for (let i = 0; i < this.emojiLabels.length; i++) {
-            const label = this.emojiLabels[i] || `Target ${i}`;
+        // Create exactly 6 target entities (one for each target in targets.mind)
+        for (let targetIndex = 0; targetIndex < 6; targetIndex++) {
+            const labelText = TARGET_LABELS[targetIndex] || `Target ${targetIndex}`;
+            
+            // Create the mindar-image-target entity
             const targetEl = document.createElement('a-mindar-image-target');
-            targetEl.setAttribute('targetIndex', i);
-            targetEl.id = `target-${i}`;
-            targetEl.setAttribute('visible', true);
+            targetEl.setAttribute('targetIndex', targetIndex);
+            targetEl.id = `target-${targetIndex}`;
             
-            // Listen for target found/lost events on each target entity
-            targetEl.addEventListener('targetFound', (event) => {
-                console.log(`🎯🎯🎯 Target ${i} (${label}) FOUND!`, event);
-                console.log('Event detail:', event.detail);
-                console.log('Target element:', targetEl);
-                
-                this.detectedTargets.set(i, {
-                    targetIndex: i,
-                    label,
-                    confidence: 1.0,
-                    found: true,
-                    timestamp: Date.now()
-                });
-                
-                console.log('Current detected targets map:', Array.from(this.detectedTargets.entries()));
-                console.log('Detected targets count:', this.detectedTargets.size);
+            // Create a floating text label entity as a child of the target
+            // The text will be positioned slightly above the target (0 0.6 0 relative position)
+            const textEl = document.createElement('a-text');
+            textEl.setAttribute('value', labelText);
+            textEl.setAttribute('align', 'center'); // Center the text
+            textEl.setAttribute('color', '#FFFFFF'); // White text
+            textEl.setAttribute('position', '0 0.6 0'); // Position above target
+            textEl.setAttribute('scale', '2 2 2'); // Make text readable
+            textEl.setAttribute('look-at', '[camera]'); // Text always faces camera
+            textEl.id = `label-${targetIndex}`;
+            textEl.setAttribute('visible', false); // Hidden by default, shown when target found
+            
+            // Add text as child of target entity
+            targetEl.appendChild(textEl);
+            
+            // Handle targetFound event: show the text label
+            targetEl.addEventListener('targetFound', () => {
+                console.log(`🎯 Target ${targetIndex} (${labelText}) FOUND!`);
+                textEl.setAttribute('visible', true);
             });
             
-            targetEl.addEventListener('targetLost', (event) => {
-                console.log(`❌❌❌ Target ${i} (${label}) LOST`, event);
-                this.detectedTargets.delete(i);
-                console.log('Remaining detected targets:', Array.from(this.detectedTargets.keys()));
+            // Handle targetLost event: hide the text label
+            targetEl.addEventListener('targetLost', () => {
+                console.log(`❌ Target ${targetIndex} (${labelText}) LOST`);
+                textEl.setAttribute('visible', false);
             });
             
-            // Also listen on the scene for target events (some MindAR versions fire on scene)
-            this.scene.addEventListener(`targetFound-${i}`, () => {
-                console.log(`🎯 Scene event: Target ${i} (${label}) FOUND!`);
-                this.detectedTargets.set(i, {
-                    targetIndex: i,
-                    label,
-                    confidence: 1.0,
-                    found: true,
-                    timestamp: Date.now()
-                });
-            });
-            
-            // Add to scene
+            // Add target entity to scene
             this.scene.appendChild(targetEl);
-            console.log(`✓ Created target entity for index ${i} (${label})`);
+            console.log(`✓ Created target entity ${targetIndex} (${labelText}) with floating label`);
         }
         
-        console.log(`✓ All ${this.emojiLabels.length} target entities created and added to scene`);
-        
-        // Verify targets were added
+        // Verify all 6 targets were created
         const allTargets = this.scene.querySelectorAll('a-mindar-image-target');
-        console.log(`Total target entities in scene: ${allTargets.length}`);
-        
-        // Log target details for debugging
-        allTargets.forEach((target, idx) => {
-            console.log(`Target ${idx}:`, {
-                id: target.id,
-                targetIndex: target.getAttribute('targetIndex'),
-                visible: target.getAttribute('visible'),
-                hasObject3D: !!target.object3D
-            });
-        });
-        
-        // Set up a periodic check to see if any targets become visible
-        // This is a fallback in case events don't fire properly
-        if (!this.visibilityCheckInterval) {
-            this.visibilityCheckInterval = setInterval(() => {
-                const visibleTargets = [];
-                const allTargetsNow = this.scene.querySelectorAll('a-mindar-image-target');
-                allTargetsNow.forEach((targetEl) => {
-                    const targetIndex = parseInt(targetEl.getAttribute('targetIndex'));
-                    const object3D = targetEl.object3D;
-                    if (object3D && object3D.visible) {
-                        // Check if target has meaningful position (not at origin)
-                        const hasRealPosition = object3D.position && 
-                            (Math.abs(object3D.position.x) > 0.001 || 
-                             Math.abs(object3D.position.y) > 0.001 || 
-                             Math.abs(object3D.position.z) > 0.001);
-                        
-                        if (hasRealPosition) {
-                            visibleTargets.push(targetIndex);
-                            // If target is visible but not in detectedTargets, add it
-                            if (!this.detectedTargets.has(targetIndex)) {
-                                const label = this.emojiLabels[targetIndex] || `Target ${targetIndex}`;
-                                console.log(`🔍 Auto-detected visible target: ${targetIndex} (${label})`, {
-                                    position: object3D.position
-                                });
-                                this.detectedTargets.set(targetIndex, {
-                                    targetIndex,
-                                    label,
-                                    confidence: 0.85,
-                                    found: true,
-                                    timestamp: Date.now()
-                                });
-                            }
-                        }
-                    } else if (object3D && !object3D.visible && this.detectedTargets.has(targetIndex)) {
-                        // Remove if no longer visible
-                        this.detectedTargets.delete(targetIndex);
-                        console.log(`Target ${targetIndex} no longer visible`);
-                    }
-                });
-                if (visibleTargets.length > 0) {
-                    console.log('Currently visible targets:', visibleTargets);
-                }
-            }, 500); // Check every 500ms for faster response
-        }
+        console.log(`✓ All ${allTargets.length} target entities created and added to scene`);
     }
 
     /**
      * Get current detections from MindAR
-     * @returns {Array<{label: string, confidence: number, targetIndex: number}>} Current detections
+     * This method is kept for compatibility but labels are now handled by A-Frame text entities
+     * @returns {Array} Empty array - labels are displayed via A-Frame entities, not this method
      */
     getDetections() {
-        if (!this.isLoaded) {
-            return [];
-        }
-
-        // Also try to get detections directly from MindAR system if available
-        if (this.mindarSystem && this.scene) {
-            try {
-                // Check MindAR system for tracked targets
-                if (this.mindarSystem.el && this.mindarSystem.el.systems) {
-                    // Try different ways to access tracked targets
-                    const mindarEl = this.scene.querySelector('[mindar-image]');
-                    if (mindarEl && mindarEl.components && mindarEl.components['mindar-image']) {
-                        const mindarComponent = mindarEl.components['mindar-image'];
-                        // Check if component has tracked targets
-                        if (mindarComponent.trackedTargets) {
-                            const tracked = mindarComponent.trackedTargets;
-                            console.log('MindAR tracked targets from component:', tracked);
-                        }
-                    }
-                }
-            } catch (e) {
-                // Ignore errors
-            }
-            
-            // Check all target entities to see their visibility/status
-            const allTargets = this.scene.querySelectorAll('a-mindar-image-target');
-            allTargets.forEach((targetEl) => {
-                const targetIndex = parseInt(targetEl.getAttribute('targetIndex'));
-                const object3D = targetEl.object3D;
-                
-                // Check if target is being tracked by checking its visibility and position
-                if (object3D) {
-                    const isVisible = object3D.visible;
-                    const hasPosition = object3D.position && (
-                        object3D.position.x !== 0 || 
-                        object3D.position.y !== 0 || 
-                        object3D.position.z !== 0
-                    );
-                    
-                    // If target is visible and has a position, it's likely being tracked
-                    if (isVisible && hasPosition) {
-                        if (!this.detectedTargets.has(targetIndex)) {
-                            const label = this.emojiLabels[targetIndex] || `Target ${targetIndex}`;
-                            console.log(`🔍 Target ${targetIndex} (${label}) detected via visibility check`, {
-                                visible: isVisible,
-                                position: object3D.position
-                            });
-                            this.detectedTargets.set(targetIndex, {
-                                targetIndex,
-                                label,
-                                confidence: 0.9,
-                                found: true,
-                                timestamp: Date.now()
-                            });
-                        }
-                    } else if (!isVisible && this.detectedTargets.has(targetIndex)) {
-                        // Target lost visibility
-                        this.detectedTargets.delete(targetIndex);
-                    }
-                }
-            });
-        }
-
-        // Return up to 2 detected targets
-        const detections = Array.from(this.detectedTargets.values())
-            .slice(0, 2);
-        
-        if (detections.length > 0) {
-            console.log('Returning detections:', detections.map(d => `${d.label} (${d.targetIndex})`));
-        }
-        
-        return detections;
+        // Labels are now displayed directly via A-Frame text entities attached to targets
+        // No need to return detections here - the text labels show/hide automatically
+        return [];
     }
 
-    /**
-     * Update emoji labels mapping
-     * @param {Array<string>} labels - Array of emoji labels
-     */
-    setEmojiLabels(labels) {
-        this.emojiLabels = labels;
-    }
 }
 
 // ============================================================================
@@ -827,8 +649,6 @@ class AppController {
             const loaded = await this.modelAdapter.loadModel();
             if (loaded) {
                 console.log('MindAR model loaded successfully');
-                // Update emoji labels from config
-                this.modelAdapter.setEmojiLabels(EMOJI_LABELS);
             } else {
                 console.error('Failed to load MindAR model');
                 // Don't block - continue anyway
@@ -856,41 +676,10 @@ class AppController {
                 return;
             }
 
-            // Get current detections from MindAR
-            const detections = this.modelAdapter.getDetections();
-            
-            if (detections.length > 0) {
-                // Log detections periodically (not every frame)
-                if (this.frameCount === undefined) this.frameCount = 0;
-                this.frameCount++;
-                if (this.frameCount % 30 === 0) { // Log every 30 frames (~1 second at 30fps)
-                    console.log('🎯 MindAR detections:', detections.map(d => `${d.label} (${d.targetIndex})`));
-                }
-                
-                // Convert to format expected by detection state
-                const predictions = detections.map(d => ({
-                    label: d.label,
-                    confidence: d.confidence
-                }));
-                
-                // Just draw status - user only wants status visible
-                this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
-                this.drawDetectionStatus(detections.length);
-                
-                // Update state with smoothing
-                const stateChanged = this.detectionState.update(predictions);
-                
-                if (stateChanged) {
-                    // Switch playlist if combo changed
-                    const comboKey = this.detectionState.getComboKey();
-                    console.log('🔄 Switching playlist:', comboKey);
-                    this.musicPlayer.switchPlaylist(comboKey);
-                }
-            } else {
-                // Just draw status when no detections
-                this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
-                this.drawDetectionStatus(0);
-            }
+            // Labels are now displayed via A-Frame text entities, not through detection loop
+            // Just draw the status message
+            this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
+            this.drawDetectionStatus(0);
         }
 
         requestAnimationFrame(() => this.detectionLoop());
