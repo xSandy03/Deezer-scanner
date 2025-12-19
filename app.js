@@ -972,8 +972,9 @@ class AppController {
                     confidence: d.confidence
                 }));
                 
-                // Draw labels on overlay (status will be drawn inside to preserve both)
-                this.drawMindARDetections(detections, detections.length);
+                // Just draw status - user only wants status visible
+                this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
+                this.drawDetectionStatus(detections.length);
                 
                 // Update state with smoothing
                 const stateChanged = this.detectionState.update(predictions);
@@ -985,8 +986,9 @@ class AppController {
                     this.musicPlayer.switchPlaylist(comboKey);
                 }
             } else {
-                // Draw status showing no detections (function handles clearing)
-                this.drawMindARDetections([], 0);
+                // Just draw status when no detections
+                this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
+                this.drawDetectionStatus(0);
             }
         }
 
@@ -999,44 +1001,48 @@ class AppController {
      */
     drawDetectionStatus(detectionCount) {
         if (!this.overlayCanvas || !this.overlayCtx) {
+            console.warn('Cannot draw status: missing canvas or context');
             return;
         }
+
+        console.log('Drawing status, canvas size:', this.overlayCanvas.width, this.overlayCanvas.height);
 
         // Always show "Move camera towards Mood Cubes" message
         const statusText = 'Move camera towards Mood Cubes';
         
-        // Use Deezer purple color
-        const bgColor = 'rgba(162, 56, 255, 0.9)'; // #A238FF with transparency
+        // Use Deezer purple color #A238FF
+        const bgColor = 'rgba(162, 56, 255, 0.95)'; // #A238FF with high opacity
         
-        // Load Deezer font - need to wait for font to load
-        // Draw status at bottom center of screen
-        this.overlayCtx.font = 'bold 24px "Deezer Product", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+        // Set font - use system font as fallback if Deezer font doesn't load
+        this.overlayCtx.font = 'bold 28px "Deezer Product", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif';
+        this.overlayCtx.textAlign = 'center';
+        this.overlayCtx.textBaseline = 'middle';
+        
         const textMetrics = this.overlayCtx.measureText(statusText);
         const textWidth = textMetrics.width;
-        const textHeight = 28;
-        const padding = 16;
-        const margin = 30;
+        const textHeight = 32;
+        const padding = 20;
+        const margin = 40;
         
-        const x = (this.overlayCanvas.width - textWidth) / 2;
-        const y = this.overlayCanvas.height - margin - textHeight;
+        // Center horizontally, position at bottom
+        const x = this.overlayCanvas.width / 2;
+        const y = this.overlayCanvas.height - margin - (textHeight / 2);
         
         // Draw background rectangle
-        const rectX = x - padding;
-        const rectY = y - textHeight - padding;
+        const rectX = x - (textWidth / 2) - padding;
+        const rectY = y - (textHeight / 2) - padding;
         const rectWidth = textWidth + (padding * 2);
         const rectHeight = textHeight + (padding * 2);
         
+        // Draw background
         this.overlayCtx.fillStyle = bgColor;
-        if (typeof this.overlayCtx.roundRect === 'function') {
-            this.overlayCtx.roundRect(rectX, rectY, rectWidth, rectHeight, 12);
-            this.overlayCtx.fill();
-        } else {
-            this.overlayCtx.fillRect(rectX, rectY, rectWidth, rectHeight);
-        }
+        this.overlayCtx.fillRect(rectX, rectY, rectWidth, rectHeight);
         
         // Draw status text in white
         this.overlayCtx.fillStyle = '#FFFFFF';
         this.overlayCtx.fillText(statusText, x, y);
+        
+        console.log('Status drawn at:', x, y, 'text:', statusText);
     }
 
     /**

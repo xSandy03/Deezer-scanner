@@ -240,16 +240,17 @@ body video,
 
 /* Overlay Canvas for bounding boxes and labels */
 #overlayCanvas {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    pointer-events: none;
-    z-index: 100;
-    display: block;
-    visibility: visible;
-    opacity: 1;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    pointer-events: none !important;
+    z-index: 1000 !important;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    background: transparent !important;
 }
 
 /* Mobile Optimizations */
