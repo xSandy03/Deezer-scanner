@@ -72,12 +72,15 @@ class EmojiModelAdapter {
 
             // Check if cocoSsd is available
             if (typeof cocoSsd === 'undefined') {
+                console.error('COCO-SSD library not found! Make sure the script tag is loaded.');
                 throw new Error('COCO-SSD model not loaded. Check script tag.');
             }
 
             // Load COCO-SSD model
             console.log('Loading COCO-SSD model...');
-            this.model = await cocoSsd.load();
+            this.model = await cocoSsd.load({
+                base: 'mobilenet_v2'
+            });
             this.isLoaded = true;
             console.log('COCO-SSD model loaded successfully');
             
@@ -107,11 +110,19 @@ class EmojiModelAdapter {
         try {
             // Run COCO-SSD detection
             const detections = await this.model.detect(image);
+            console.log('COCO-SSD detections:', detections.length, 'objects detected');
+            
+            if (detections.length === 0) {
+                console.log('No objects detected in frame');
+                return [];
+            }
             
             // Sort by confidence score and limit to top 2 highest confidence detections
             const topDetections = detections
                 .sort((a, b) => b.score - a.score)
                 .slice(0, 2);
+            
+            console.log('Top 2 detections:', topDetections.map(d => ({ class: d.class, score: d.score })));
             
             // Map COCO-SSD detections to our format with emoji labels
             // For now, we'll use the class name, but you can add classification later
@@ -613,15 +624,21 @@ class AppController {
                 // Capture frame
                 this.ctx.drawImage(this.video, 0, 0, this.canvas.width, this.canvas.height);
                 
-                // Predict with bounding box support
-                const predictions = await this.modelAdapter.predict(
-                    this.canvas, 
-                    this.canvas.width, 
-                    this.canvas.height
-                );
-                
-                // Draw bounding boxes and labels on overlay
-                this.drawDetections(predictions);
+                // Check if model is loaded
+                if (!this.modelAdapter.isLoaded) {
+                    console.log('Model not loaded yet, skipping detection');
+                } else {
+                    // Predict with bounding box support
+                    const predictions = await this.modelAdapter.predict(
+                        this.canvas, 
+                        this.canvas.width, 
+                        this.canvas.height
+                    );
+                    
+                    console.log('Predictions received:', predictions.length);
+                    
+                    // Draw bounding boxes and labels on overlay
+                    this.drawDetections(predictions);
                 
                 // Update state with smoothing (use top detection)
                 const stateChanged = this.detectionState.update(predictions);
@@ -642,7 +659,18 @@ class AppController {
      * @param {Array<{label: string, confidence: number, bbox: {x: number, y: number, width: number, height: number}}>} detections
      */
     drawDetections(detections) {
-        if (!this.overlayCanvas || !this.overlayCtx || !this.video) return;
+        if (!this.overlayCanvas || !this.overlayCtx || !this.video) {
+            console.warn('Cannot draw detections: missing overlay canvas or video element');
+            return;
+        }
+
+        if (!detections || detections.length === 0) {
+            // Clear overlay if no detections
+            this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
+            return;
+        }
+
+        console.log('Drawing', detections.length, 'detections');
 
         // Clear previous drawings
         this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
