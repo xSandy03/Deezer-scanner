@@ -6,12 +6,12 @@
 const CONFIG = {
     CONFIDENCE_THRESHOLD: 0.75,
     SMOOTHING_FRAMES: 8, // Number of consecutive frames required for stable detection
-    TARGETS_FILE: './targets.mind', // MindAR targets file
+    TARGETS_FILE: './target.mind', // MindAR targets file (single target)
     MOCK_MODE: false, // Set to true for testing without camera
 };
 
 // Target Labels - Mapping target indices to display names
-// MindAR targets.mind file contains 6 image targets (indices 0-5)
+// MindAR target.mind file contains 1 image target (index 0)
 const TARGET_LABELS = {
     0: "Chill",
     1: "Confused",
