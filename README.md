@@ -1,234 +1,292 @@
-# CUBE AR - WebAR Experience
+# Emoji Detection Music Player
 
-A mobile-first WebAR application using MindAR (image tracking) and A-Frame. Supports multiple simultaneous image targets with synchronized video and audio playback.
+A mobile-first web app that uses your device camera to detect emojis from two cubes and plays music based on the detected emoji combination. Built with TensorFlow.js for client-side detection and designed for GitHub Pages deployment.
 
 ## Features
 
-- **Multi-target tracking**: Supports up to 12 image targets (6 per cube) detected simultaneously
-- **Video playback**: Each target displays a unique MP4 animation
-- **Audio playback**: Priority-based audio system (last found target wins)
-- **Mobile-optimized**: Touch-friendly UI with tap-to-start interaction
-- **Modern design**: Strict 3-color system (#A238FF, #000000, #FFFFFF)
+- 📷 **Live Camera Detection**: Uses device camera to detect emojis in real-time
+- 🎯 **Dual Emoji Detection**: Detects up to two emojis simultaneously with smoothing for stability
+- 🎵 **Dynamic Playlists**: Automatically switches music based on emoji combinations
+- 🎨 **Deezer-like UI**: Clean, modern design with purple accents (#A238FF)
+- 📱 **Mobile Optimized**: Works on iPhone Safari and Android Chrome
+- 🔋 **Low Power Mode**: Reduce detection rate to save battery
+- 🧪 **Mock Mode**: Test without camera using dropdown controls
 
-## File Structure
+## Project Structure
 
 ```
-.
+Deezer/
 ├── index.html          # Main HTML file
-├── styles.css          # All styles
-├── app.js             # Application logic
-├── README.md          # This file
-├── targets.mind       # MindAR compiled target file (required)
-├── v0.mp4 ... v11.mp4 # Video files for targets 0-11 (required)
-└── a0.mp3 ... a11.mp3 # Audio files for targets 0-11 (required)
+├── styles.css          # Stylesheet
+├── app.js              # Main application logic
+├── emoji-model/        # TensorFlow.js model files (see below)
+│   └── model.json      # Model configuration
+│   └── weights/        # Model weights
+├── assets/
+│   └── audio/          # Audio files (MP3 format)
+└── README.md           # This file
 ```
 
-## Prerequisites
+## Setup Instructions
 
-- HTTPS hosting (required for camera access)
-- Modern browser with WebRTC support
-- Camera permissions
+### 1. Hosting on GitHub Pages
 
-## Setup
+1. Create a new GitHub repository
+2. Push all files to the repository
+3. Go to Settings → Pages
+4. Select your branch (usually `main` or `master`)
+5. Your app will be available at `https://[username].github.io/[repository-name]/`
 
-### 1. Prepare Media Files
+### 2. Adding Audio Files
 
-#### Videos (v0.mp4 to v11.mp4)
-- **Format**: MP4 (H.264 codec recommended)
-- **Resolution**: 512x512 to 1024x1024 pixels (square)
-- **Duration**: Short loops (2-10 seconds recommended)
-- **File size**: Keep under 5MB per video for mobile performance
-- **Naming**: Must be `v0.mp4`, `v1.mp4`, ... `v11.mp4` in root folder
+1. Place your MP3 files in the `assets/audio/` folder
+2. Update `COMBO_PLAYLISTS` in `app.js`:
 
-#### Audio (a0.mp3 to a11.mp3)
-- **Format**: MP3 or M4A
-- **Duration**: Looping tracks (match video length or longer)
-- **Bitrate**: 128kbps recommended
-- **File size**: Keep under 2MB per audio file
-- **Naming**: Must be `a0.mp3`, `a1.mp3`, ... `a11.mp3` in root folder
-
-### 2. Compile targets.mind
-
-The `targets.mind` file contains compiled image targets for MindAR. To create it:
-
-#### Option A: Using MindAR CLI
-
-1. Install Node.js (v14+)
-2. Install MindAR CLI:
-   ```bash
-   npm install -g @mind-ar/mind-ar-cli
-   ```
-
-3. Prepare your target images:
-   - Create a folder with 12 images (one per target)
-   - Name them: `target0.jpg`, `target1.jpg`, ... `target11.jpg`
-   - Recommended: 512x512 to 1024x1024 pixels, high contrast, unique patterns
-
-4. Compile:
-   ```bash
-   mind-ar-cli compile <path-to-images-folder> --output targets.mind
-   ```
-
-#### Option B: Using MindAR Web Compiler
-
-1. Visit: https://mind-ar.github.io/mind-ar-js-doc/tools/compile
-2. Upload your 12 target images
-3. Download the compiled `.mind` file
-4. Rename to `targets.mind` and place in root folder
-
-#### Target Organization
-- **Cube A**: targetIndex 0-5 (first 6 images)
-- **Cube B**: targetIndex 6-11 (last 6 images)
-
-### 3. Deploy
-
-#### Netlify
-1. Push code to GitHub/GitLab
-2. Connect repository to Netlify
-3. Deploy (HTTPS is automatic)
-
-#### GitHub Pages
-1. Push code to GitHub repository
-2. Go to Settings > Pages
-3. Select branch and folder
-4. Enable HTTPS (automatic on GitHub Pages)
-
-#### Local HTTPS Testing
-For local development with HTTPS:
-```bash
-# Using Python
-python3 -m http.server 8000 --bind 127.0.0.1
-
-# Then use ngrok or similar
-ngrok http 8000
+```javascript
+const COMBO_PLAYLISTS = {
+    '😄|😈': [
+        { 
+            title: 'Your Track Name', 
+            artist: 'Artist Name', 
+            src: './assets/audio/your-file.mp3' 
+        },
+        // Add more tracks...
+    ],
+    // Add more combinations...
+};
 ```
 
-## Usage
+**Important Notes:**
+- Use relative paths starting with `./assets/audio/`
+- File names should not contain spaces (use hyphens or underscores)
+- Supported formats: MP3 (most compatible across browsers)
 
-1. **Open on mobile device** (or desktop with camera)
-2. **Grant camera permissions** when prompted
-3. **Tap "Tap to Start"** overlay to begin
-4. **Point camera at cube targets** (20-40cm distance)
-5. **Multiple targets** can be detected simultaneously
-6. **Audio plays** for the most recently found target
-7. **Use controls**:
-   - 🔊 Mute/Unmute audio
-   - ? View help
-   - D Toggle debug mode
+### 3. Editing Playlist Mappings
+
+The `COMBO_PLAYLISTS` object in `app.js` maps emoji combinations to playlists:
+
+- **Order-independent**: `'😄|😈'` and `'😈|😄'` are treated as the same combo
+- **Single emoji**: Use format `'😄|—'` for single emoji detection
+- **Default fallback**: Use key `'DEFAULT'` for when no combo matches
+
+Example:
+```javascript
+const COMBO_PLAYLISTS = {
+    '😄|😈': [ /* tracks */ ],
+    '😄|—': [ /* single emoji tracks */ ],
+    'DEFAULT': [ /* fallback tracks */ ]
+};
+```
+
+### 4. Replacing the Model
+
+The app uses TensorFlow.js for emoji detection. To use your own model:
+
+#### Option A: Teachable Machine Export
+
+1. Train your model in [Google Teachable Machine](https://teachablemachine.withgoogle.com/)
+2. Export as TensorFlow.js model
+3. Place files in `emoji-model/`:
+   - `model.json`
+   - `weights/` folder with weight files
+
+#### Option B: Custom TensorFlow.js Model
+
+1. Export your model in TensorFlow.js format
+2. Place in `emoji-model/` folder
+3. Update `app.js`:
+
+**Step 1: Update model path** (if different)
+```javascript
+const CONFIG = {
+    MODEL_PATH: './emoji-model/model.json',
+    // ...
+};
+```
+
+**Step 2: Update model adapter** (in `EmojiModelAdapter` class)
+
+Update the `loadModel()` method:
+```javascript
+async loadModel() {
+    this.model = await tf.loadLayersModel(CONFIG.MODEL_PATH);
+    this.isLoaded = true;
+    // Get input size from model if needed
+    const inputShape = this.model.inputs[0].shape;
+    this.inputSize = [inputShape[1], inputShape[2]];
+    return true;
+}
+```
+
+**Step 3: Update emoji labels** (in `predict()` method)
+
+Replace the `emojiLabels` array with your model's class labels:
+```javascript
+const emojiLabels = ['😄', '😈', '🎵', '🔥', '❤️', '⭐']; // Your labels
+```
+
+**Step 4: Adjust preprocessing** (if needed)
+
+Modify `preprocess()` method based on your model's requirements:
+- Input size (default: 224x224)
+- Normalization (default: divide by 255)
+- Color channels (default: RGB)
+
+**Step 5: Disable mock mode**
+
+In `app.js`, set:
+```javascript
+const CONFIG = {
+    MOCK_MODE: false, // Enable real detection
+    // ...
+};
+```
+
+#### Model Requirements
+
+- **Format**: TensorFlow.js Layers Model
+- **Input**: Image (will be resized to model's input size)
+- **Output**: Class probabilities (one per emoji class)
+- **Size**: Keep model under 10MB for better loading performance
+
+## Configuration
+
+Edit `CONFIG` object in `app.js`:
+
+```javascript
+const CONFIG = {
+    CONFIDENCE_THRESHOLD: 0.75,    // Minimum confidence (0-1)
+    SMOOTHING_FRAMES: 8,            // Frames for stable detection
+    DETECTION_FPS: 10,              // Detection rate (frames per second)
+    LOW_POWER_FPS: 5,               // FPS in low power mode
+    MODEL_PATH: './emoji-model/model.json',
+    MOCK_MODE: true,                // Set to false when model ready
+};
+```
+
+### Tuning Detection
+
+- **CONFIDENCE_THRESHOLD**: Higher = more strict (fewer false positives, more misses)
+- **SMOOTHING_FRAMES**: Higher = more stable but slower to respond
+- **DETECTION_FPS**: Higher = more responsive but uses more CPU
 
 ## Troubleshooting
 
-### Autoplay Issues
+### Camera Permissions
 
-**Problem**: Videos/audio don't play automatically
-
-**Solutions**:
-- Ensure you've tapped "Tap to Start" (required for browser autoplay policies)
-- Check that videos have `muted`, `playsinline`, and `loop` attributes
-- Verify HTTPS is enabled (required for camera access)
-- Test on actual device (not all simulators support camera)
-
-### Tracking Issues
-
-**Problem**: Targets not detected
+**Issue**: Camera doesn't start
 
 **Solutions**:
-- **Lighting**: Ensure good, even lighting (avoid glare, shadows)
-- **Distance**: Hold device 20-40cm from target
-- **Stability**: Keep device steady, avoid shaking
-- **Target quality**: Use high-contrast, unique patterns on cube faces
-- **Angle**: Face camera directly at target, avoid extreme angles
-- **Refresh**: Reload page if tracking stops working
+- Ensure you're using HTTPS (required for camera access)
+- Check browser permissions (Settings → Site Settings → Camera)
+- On iOS Safari: Tap "Allow" when prompted
+- Try refreshing the page
 
-### Audio Issues
+### iOS Autoplay Restrictions
 
-**Problem**: Audio doesn't play or cuts out
+**Issue**: Audio doesn't play automatically
 
 **Solutions**:
-- Check mute button state (🔇 = muted)
-- Verify audio files are loaded (check Network tab)
-- Ensure browser allows audio autoplay (tap-to-start unlocks this)
-- Test audio files independently (may be corrupted)
-- Check device volume settings
+- The app requires a user tap to unlock audio (handled by "Tap to Start" button)
+- Ensure you tap the start button before expecting audio
+- On iOS, audio must be triggered by user interaction
+
+### Detection Not Working
+
+**Issue**: No emojis detected
+
+**Solutions**:
+1. **Check model loading**: Open browser console, look for "Model loaded successfully"
+2. **Lower confidence threshold**: Try `CONFIDENCE_THRESHOLD: 0.5`
+3. **Check lighting**: Ensure cubes are well-lit and clearly visible
+4. **Check model labels**: Verify emoji labels in code match your model
+5. **Test in mock mode**: Use dropdown to verify playlist switching works
+
+### Model Loading Errors
+
+**Issue**: "Model failed to load" or CORS errors
+
+**Solutions**:
+- Ensure model files are in correct location (`emoji-model/`)
+- Check file paths are correct (use relative paths)
+- For local testing, use a local server (not `file://`)
+- For GitHub Pages, ensure all files are committed and pushed
+
+### Audio Not Playing
+
+**Issue**: Tracks don't play or show errors
+
+**Solutions**:
+- Check audio file paths in `COMBO_PLAYLISTS`
+- Verify files exist in `assets/audio/` folder
+- Check browser console for 404 errors
+- Ensure audio format is MP3 (most compatible)
+- Check file size (very large files may not load)
 
 ### Performance Issues
 
-**Problem**: Laggy or slow performance
+**Issue**: App is slow or laggy
 
 **Solutions**:
-- **Reduce video resolution**: Use 512x512 instead of 1024x1024
-- **Compress videos**: Use HandBrake or similar (target <2MB per video)
-- **Optimize audio**: Use 128kbps MP3, keep files small
-- **Limit simultaneous targets**: Fewer targets = better performance
-- **Close other apps**: Free up device memory
-- **Use modern device**: Older devices may struggle with multiple videos
+- Enable "Low Power Mode" toggle
+- Reduce `DETECTION_FPS` in config
+- Reduce model size (fewer classes, smaller input)
+- Close other browser tabs
+- Use a device with better performance
 
-### Camera Permissions
+### Mobile Safari Issues
 
-**Problem**: Camera access denied
+**Issue**: Camera or audio doesn't work on iPhone
 
 **Solutions**:
-- Check browser settings for camera permissions
-- Ensure HTTPS is enabled (required)
-- Try different browser (Chrome, Safari, Firefox)
-- Clear browser cache and retry
+- Ensure iOS 11+ (required for camera API)
+- Use Safari (not Chrome on iOS)
+- Check Settings → Safari → Camera/Microphone permissions
+- Try closing and reopening Safari
+- Restart device if issues persist
 
-## Performance Tips
+## Development
 
-### Video Optimization
-- **Resolution**: 512x512 to 1024x1024 (balance quality vs. performance)
-- **Codec**: H.264 (widest compatibility)
-- **Frame rate**: 24-30fps (no need for 60fps)
-- **Duration**: Keep loops short (2-10 seconds)
-- **File size**: Target <5MB per video
-- **Tools**: Use HandBrake, FFmpeg, or Adobe Media Encoder
+### Local Testing
 
-### Audio Optimization
-- **Format**: MP3 (128kbps) or M4A
-- **File size**: Target <2MB per audio
-- **Duration**: Match video or create seamless loops
-- **Tools**: Use Audacity, iTunes, or online converters
+For local development, use a local server (required for camera API):
 
-### Target Image Tips
-- **High contrast**: Black/white or bright colors
-- **Unique patterns**: Avoid repetitive or symmetric designs
-- **Size**: 512x512 to 1024x1024 pixels
-- **Format**: JPG or PNG
-- **Print quality**: Use high-quality printer, avoid glossy paper
+```bash
+# Python 3
+python -m http.server 8000
+
+# Python 2
+python -m SimpleHTTPServer 8000
+
+# Node.js (with http-server)
+npx http-server
+
+# PHP
+php -S localhost:8000
+```
+
+Then open `http://localhost:8000` in your browser.
+
+### Testing Without Camera
+
+The app includes a mock mode with dropdown controls:
+1. Set `MOCK_MODE: true` in config
+2. Use dropdowns to simulate emoji detection
+3. Test playlist switching and music player
 
 ## Browser Compatibility
 
-- **Chrome/Edge**: Full support (recommended)
-- **Safari (iOS)**: Full support (iOS 11.3+)
-- **Firefox**: Full support
-- **Opera**: Full support
-
-## Technical Details
-
-### Architecture
-- **A-Frame**: 3D framework for WebXR
-- **MindAR**: Image tracking library
-- **Custom Component**: `target-controller` manages per-target behavior
-- **State Management**: Centralized state for detected targets and audio priority
-
-### Audio Priority Logic
-- **Single target**: Plays that target's audio
-- **Multiple targets**: Plays audio for most recently found target
-- **Target lost**: Automatically switches to another detected target's audio
-- **All lost**: Stops all audio
-
-### Event Flow
-1. MindAR detects target → `targetFound` event
-2. Custom component adds target to `detectedTargets` set
-3. Video playback starts for that target
-4. Audio priority logic evaluates and plays appropriate audio
-5. UI updates to show detection status
+- ✅ Chrome/Edge (Desktop & Android)
+- ✅ Safari (iOS 11+, macOS)
+- ✅ Firefox (Desktop)
+- ⚠️ Chrome on iOS (limited camera support, use Safari)
 
 ## License
 
-This project is provided as-is for educational and commercial use.
+This project is provided as-is for educational and personal use.
 
-## Support
+## Credits
 
-For MindAR documentation: https://mind-ar.github.io/mind-ar-js-doc/
-For A-Frame documentation: https://aframe.io/docs/
+- Built with [TensorFlow.js](https://www.tensorflow.org/js)
+- Designed for GitHub Pages deployment
+- Mobile-first responsive design

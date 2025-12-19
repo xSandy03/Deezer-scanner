@@ -1,492 +1,690 @@
-/**
- * CUBE AR - WebAR Application
- * Multi-target image tracking with video and audio playback
- */
+// ============================================================================
+// Emoji Detection Music Player
+// ============================================================================
 
-(function() {
-    'use strict';
+// Configuration
+const CONFIG = {
+    CONFIDENCE_THRESHOLD: 0.75,
+    SMOOTHING_FRAMES: 8, // Number of consecutive frames required for stable detection
+    DETECTION_FPS: 10, // Frames per second for detection (throttled)
+    LOW_POWER_FPS: 5, // FPS when low power mode is enabled
+    MODEL_PATH: './emoji-model/model.json', // Path to TensorFlow.js model
+    MOCK_MODE: true, // Set to false when model is ready
+};
 
-    // ============================================
-    // State Management
-    // ============================================
-    const state = {
-        // Currently detected target indices
-        detectedTargets: new Set(),
-        
-        // Last found target index (for audio priority)
-        lastFoundIndex: null,
-        
-        // Currently playing audio target index
-        currentAudioIndex: null,
-        
-        // Audio muted state
-        audioMuted: true,
-        
-        // Debug mode
-        debugMode: false,
-        
-        // Initialized state
-        initialized: false,
-        
-        // AR system ready
-        arReady: false
-    };
+// Playlist mapping: emoji combinations -> tracks
+// Normalize combos by sorting emojis alphabetically
+const COMBO_PLAYLISTS = {
+    // Example: Happy + Devil combo (order-independent)
+    '😄|😈': [
+        { title: 'Track A', artist: 'Artist A', src: './assets/audio/track-a.mp3' },
+        { title: 'Track B', artist: 'Artist B', src: './assets/audio/track-b.mp3' },
+    ],
+    '😈|😄': [], // Will use same as 😄|😈 (normalized)
+    
+    // Single emoji playlists
+    '😄|—': [
+        { title: 'Happy Track 1', artist: 'Happy Artist', src: './assets/audio/happy-1.mp3' },
+    ],
+    '😈|—': [
+        { title: 'Devil Track 1', artist: 'Devil Artist', src: './assets/audio/devil-1.mp3' },
+    ],
+    
+    // Default fallback playlist
+    'DEFAULT': [
+        { title: 'Default Track', artist: 'Default Artist', src: './assets/audio/default.mp3' },
+    ],
+};
 
-    // ============================================
-    // DOM Elements
-    // ============================================
-    const elements = {
-        startOverlay: document.getElementById('start-overlay'),
-        ui: document.getElementById('ui'),
-        scene: document.getElementById('scene'),
-        statusText: document.getElementById('status-text'),
-        statusDetail: document.getElementById('status-detail'),
-        statusIndicator: document.querySelector('.status-indicator'),
-        helpBtn: document.getElementById('help-btn'),
-        helpModal: document.getElementById('help-modal'),
-        closeHelp: document.getElementById('close-help'),
-        debugBtn: document.getElementById('debug-btn'),
-        muteBtn: document.getElementById('mute-btn')
-    };
+// ============================================================================
+// Model Adapter Class
+// ============================================================================
 
-    // ============================================
-    // Audio Management
-    // ============================================
-    const audioElements = {};
-    const videoElements = {};
+class EmojiModelAdapter {
+    constructor() {
+        this.model = null;
+        this.isLoaded = false;
+        this.inputSize = [224, 224]; // Default input size, adjust based on your model
+    }
 
     /**
-     * Initialize audio elements for all targets
+     * Load TensorFlow.js model from local files
+     * TODO: Replace this with your actual model loading logic
+     * Model should be exported from Teachable Machine or similar tool
+     * Expected structure: /emoji-model/model.json and weight files
      */
-    function initAudioElements() {
-        for (let i = 0; i < 12; i++) {
-            const audio = new Audio();
-            audio.src = `./a${i}.mp3`;
-            audio.loop = true;
-            audio.preload = 'metadata';
-            audio.volume = 1.0;
-            audioElements[i] = audio;
+    async loadModel() {
+        try {
+            // TODO: Uncomment when model files are ready
+            // this.model = await tf.loadLayersModel(CONFIG.MODEL_PATH);
+            // this.isLoaded = true;
+            // console.log('Model loaded successfully');
+            
+            // For now, return mock success
+            console.log('Model loading skipped (mock mode)');
+            this.isLoaded = false;
+            return true;
+        } catch (error) {
+            console.error('Error loading model:', error);
+            this.isLoaded = false;
+            return false;
         }
     }
 
     /**
-     * Initialize video elements (will be created in A-Frame)
+     * Preprocess image for model input
+     * @param {HTMLImageElement|ImageData|HTMLCanvasElement} image - Input image
+     * @returns {tf.Tensor} Preprocessed tensor
      */
-    function initVideoElements() {
-        // Videos are created as A-Frame entities, stored in videoElements map
-        // This is handled in createTargetEntities()
-    }
-
-    /**
-     * Play audio for a specific target index
-     */
-    function playAudioForTarget(targetIndex) {
-        if (state.audioMuted) return;
-        
-        const audio = audioElements[targetIndex];
-        if (!audio) return;
-
-        // Stop current audio if different
-        if (state.currentAudioIndex !== null && state.currentAudioIndex !== targetIndex) {
-            const currentAudio = audioElements[state.currentAudioIndex];
-            if (currentAudio) {
-                currentAudio.pause();
-                currentAudio.currentTime = 0;
-            }
-        }
-
-        // Play new audio
-        audio.currentTime = 0;
-        audio.play().catch(err => {
-            console.warn(`Failed to play audio for target ${targetIndex}:`, err);
+    preprocess(image) {
+        // TODO: Adjust preprocessing based on your model requirements
+        // Common preprocessing: resize, normalize, convert to tensor
+        return tf.tidy(() => {
+            let tensor = tf.browser.fromPixels(image);
+            tensor = tf.image.resizeBilinear(tensor, this.inputSize);
+            tensor = tensor.div(255.0); // Normalize to [0, 1]
+            tensor = tensor.expandDims(0); // Add batch dimension
+            return tensor;
         });
-        
-        state.currentAudioIndex = targetIndex;
-        updateStatusDetail(`Audio: Target ${targetIndex}`);
     }
 
     /**
-     * Stop audio for a specific target
+     * Predict emojis from image
+     * @param {HTMLImageElement|ImageData|HTMLCanvasElement} image - Input image
+     * @returns {Array<{label: string, confidence: number}>} Top predictions
      */
-    function stopAudioForTarget(targetIndex) {
-        const audio = audioElements[targetIndex];
-        if (audio) {
-            audio.pause();
-            audio.currentTime = 0;
+    async predict(image) {
+        if (!this.isLoaded || CONFIG.MOCK_MODE) {
+            // Mock predictions for testing
+            return this.mockPredict();
         }
-        
-        if (state.currentAudioIndex === targetIndex) {
-            state.currentAudioIndex = null;
+
+        try {
+            const preprocessed = this.preprocess(image);
+            const predictions = await this.model.predict(preprocessed);
+            const data = await predictions.data();
+            
+            // TODO: Map predictions to emoji labels
+            // This depends on your model's output structure
+            // Example: if model outputs class probabilities, map indices to emoji labels
+            const emojiLabels = ['😄', '😈', '🎵', '🔥', '❤️', '⭐']; // TODO: Replace with actual labels
+            
+            const results = Array.from(data)
+                .map((confidence, index) => ({
+                    label: emojiLabels[index] || `Emoji${index}`,
+                    confidence: confidence
+                }))
+                .sort((a, b) => b.confidence - a.confidence)
+                .filter(p => p.confidence >= CONFIG.CONFIDENCE_THRESHOLD);
+            
+            preprocessed.dispose();
+            predictions.dispose();
+            
+            return results;
+        } catch (error) {
+            console.error('Prediction error:', error);
+            return [];
         }
     }
 
     /**
-     * Handle audio priority when multiple targets detected
+     * Mock predictions for testing without model
      */
-    function updateAudioPlayback() {
-        if (state.detectedTargets.size === 0) {
-            // No targets detected, stop all audio
-            if (state.currentAudioIndex !== null) {
-                stopAudioForTarget(state.currentAudioIndex);
-                updateStatusDetail('');
+    mockPredict() {
+        // Return empty array - mock mode will use dropdown instead
+        return [];
+    }
+}
+
+// ============================================================================
+// Detection State Manager
+// ============================================================================
+
+class DetectionState {
+    constructor() {
+        this.emojiA = null;
+        this.emojiB = null;
+        this.smoothingBuffer = {
+            emojiA: [],
+            emojiB: []
+        };
+        this.frameCount = 0;
+    }
+
+    /**
+     * Update detection state with smoothing
+     * @param {Array<{label: string, confidence: number}>} predictions - Top predictions
+     */
+    update(predictions) {
+        this.frameCount++;
+        
+        // Get top two predictions
+        const topTwo = predictions.slice(0, 2);
+        const predA = topTwo[0] || null;
+        const predB = topTwo[1] || null;
+
+        // Add to smoothing buffer
+        this.smoothingBuffer.emojiA.push(predA?.label || null);
+        this.smoothingBuffer.emojiB.push(predB?.label || null);
+
+        // Keep only last N frames
+        if (this.smoothingBuffer.emojiA.length > CONFIG.SMOOTHING_FRAMES) {
+            this.smoothingBuffer.emojiA.shift();
+            this.smoothingBuffer.emojiB.shift();
+        }
+
+        // Check if we have enough frames for stable detection
+        if (this.smoothingBuffer.emojiA.length >= CONFIG.SMOOTHING_FRAMES) {
+            // Get most common value in buffer
+            const stableA = this.getStableValue(this.smoothingBuffer.emojiA);
+            const stableB = this.getStableValue(this.smoothingBuffer.emojiB);
+
+            // Update state only if changed
+            if (stableA !== this.emojiA || stableB !== this.emojiB) {
+                this.emojiA = stableA;
+                this.emojiB = stableB;
+                return true; // State changed
             }
-        } else if (state.detectedTargets.size === 1) {
-            // Single target detected, play its audio
-            const targetIndex = Array.from(state.detectedTargets)[0];
-            if (state.currentAudioIndex !== targetIndex) {
-                playAudioForTarget(targetIndex);
+        }
+
+        return false; // State unchanged
+    }
+
+    /**
+     * Get most common value in array (for smoothing)
+     */
+    getStableValue(arr) {
+        const counts = {};
+        let maxCount = 0;
+        let maxValue = null;
+
+        arr.forEach(val => {
+            if (val === null) return;
+            counts[val] = (counts[val] || 0) + 1;
+            if (counts[val] > maxCount) {
+                maxCount = counts[val];
+                maxValue = val;
             }
+        });
+
+        // Require at least 60% of frames to agree
+        return maxCount >= CONFIG.SMOOTHING_FRAMES * 0.6 ? maxValue : null;
+    }
+
+    /**
+     * Get normalized combo key (order-independent)
+     */
+    getComboKey() {
+        const emojis = [this.emojiA, this.emojiB].filter(e => e !== null);
+        if (emojis.length === 0) return 'DEFAULT';
+        if (emojis.length === 1) return `${emojis[0]}|—`;
+        
+        // Sort alphabetically for order independence
+        const sorted = emojis.sort();
+        return sorted.join('|');
+    }
+
+    /**
+     * Reset state
+     */
+    reset() {
+        this.emojiA = null;
+        this.emojiB = null;
+        this.smoothingBuffer = { emojiA: [], emojiB: [] };
+        this.frameCount = 0;
+    }
+}
+
+// ============================================================================
+// Music Player Class
+// ============================================================================
+
+class MusicPlayer {
+    constructor() {
+        this.audio = new Audio();
+        this.currentPlaylist = [];
+        this.currentTrackIndex = -1;
+        this.currentCombo = null;
+        this.isPlaying = false;
+        this.volume = 1.0;
+
+        this.setupAudioListeners();
+    }
+
+    setupAudioListeners() {
+        this.audio.addEventListener('loadedmetadata', () => {
+            this.updateProgress();
+        });
+
+        this.audio.addEventListener('timeupdate', () => {
+            this.updateProgress();
+        });
+
+        this.audio.addEventListener('ended', () => {
+            this.next();
+        });
+
+        this.audio.addEventListener('error', (e) => {
+            console.error('Audio error:', e);
+            this.updateTrackInfo('Error loading track', '');
+        });
+    }
+
+    /**
+     * Switch to a new playlist based on emoji combo
+     */
+    switchPlaylist(comboKey) {
+        if (comboKey === this.currentCombo) {
+            return; // Already playing this combo
+        }
+
+        // Get playlist for combo (normalize order)
+        let playlist = COMBO_PLAYLISTS[comboKey];
+        
+        // Try reverse order if not found
+        if (!playlist && comboKey.includes('|')) {
+            const parts = comboKey.split('|');
+            if (parts.length === 2) {
+                const reversed = `${parts[1]}|${parts[0]}`;
+                playlist = COMBO_PLAYLISTS[reversed];
+            }
+        }
+
+        // Fallback to default
+        if (!playlist || playlist.length === 0) {
+            playlist = COMBO_PLAYLISTS['DEFAULT'] || [];
+        }
+
+        this.currentPlaylist = playlist;
+        this.currentCombo = comboKey;
+        this.currentTrackIndex = -1;
+
+        // If playing, switch to new playlist
+        if (this.isPlaying) {
+            this.pause();
+            this.next();
         } else {
-            // Multiple targets detected, use last found priority
-            if (state.lastFoundIndex !== null && state.detectedTargets.has(state.lastFoundIndex)) {
-                if (state.currentAudioIndex !== state.lastFoundIndex) {
-                    playAudioForTarget(state.lastFoundIndex);
+            // Preload first track
+            this.next();
+        }
+    }
+
+    /**
+     * Play current track
+     */
+    async play() {
+        if (this.currentTrackIndex < 0 || this.currentPlaylist.length === 0) {
+            return;
+        }
+
+        const track = this.currentPlaylist[this.currentTrackIndex];
+        if (this.audio.src !== track.src) {
+            this.audio.src = track.src;
+        }
+
+        try {
+            await this.audio.play();
+            this.isPlaying = true;
+            this.updatePlayButton();
+        } catch (error) {
+            console.error('Play error:', error);
+        }
+    }
+
+    /**
+     * Pause current track
+     */
+    pause() {
+        this.audio.pause();
+        this.isPlaying = false;
+        this.updatePlayButton();
+    }
+
+    /**
+     * Toggle play/pause
+     */
+    togglePlayPause() {
+        if (this.isPlaying) {
+            this.pause();
+        } else {
+            this.play();
+        }
+    }
+
+    /**
+     * Next track
+     */
+    next() {
+        if (this.currentPlaylist.length === 0) return;
+
+        this.currentTrackIndex = (this.currentTrackIndex + 1) % this.currentPlaylist.length;
+        const track = this.currentPlaylist[this.currentTrackIndex];
+        
+        this.audio.src = track.src;
+        this.updateTrackInfo(track.title, track.artist);
+        
+        if (this.isPlaying) {
+            this.play();
+        }
+    }
+
+    /**
+     * Previous track
+     */
+    prev() {
+        if (this.currentPlaylist.length === 0) return;
+
+        this.currentTrackIndex = this.currentTrackIndex <= 0 
+            ? this.currentPlaylist.length - 1 
+            : this.currentTrackIndex - 1;
+        
+        const track = this.currentPlaylist[this.currentTrackIndex];
+        this.audio.src = track.src;
+        this.updateTrackInfo(track.title, track.artist);
+        
+        if (this.isPlaying) {
+            this.play();
+        }
+    }
+
+    /**
+     * Set volume (0-1)
+     */
+    setVolume(volume) {
+        this.volume = volume;
+        this.audio.volume = volume;
+    }
+
+    /**
+     * Update UI elements
+     */
+    updateTrackInfo(title, artist) {
+        const titleEl = document.getElementById('trackTitle');
+        const artistEl = document.getElementById('trackArtist');
+        if (titleEl) titleEl.textContent = title;
+        if (artistEl) artistEl.textContent = artist;
+    }
+
+    updatePlayButton() {
+        const btn = document.getElementById('playPauseButton');
+        if (btn) {
+            btn.textContent = this.isPlaying ? '⏸' : '▶';
+        }
+    }
+
+    updateProgress() {
+        const progressBar = document.getElementById('progressBar');
+        const currentTimeEl = document.getElementById('currentTime');
+        const durationEl = document.getElementById('duration');
+
+        if (this.audio.duration) {
+            const progress = (this.audio.currentTime / this.audio.duration) * 100;
+            if (progressBar) progressBar.value = progress;
+        }
+
+        if (currentTimeEl) {
+            currentTimeEl.textContent = this.formatTime(this.audio.currentTime);
+        }
+
+        if (durationEl) {
+            durationEl.textContent = this.formatTime(this.audio.duration || 0);
+        }
+    }
+
+    formatTime(seconds) {
+        if (!isFinite(seconds)) return '0:00';
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
+    }
+}
+
+// ============================================================================
+// Main App Controller
+// ============================================================================
+
+class AppController {
+    constructor() {
+        this.modelAdapter = new EmojiModelAdapter();
+        this.detectionState = new DetectionState();
+        this.musicPlayer = new MusicPlayer();
+        
+        this.video = document.getElementById('videoElement');
+        this.canvas = document.getElementById('canvasElement');
+        this.ctx = this.canvas.getContext('2d');
+        
+        this.isDetecting = false;
+        this.lastDetectionTime = 0;
+        this.detectionInterval = 1000 / CONFIG.DETECTION_FPS;
+        
+        this.init();
+    }
+
+    async init() {
+        this.setupEventListeners();
+        
+        // Show mock controls if in mock mode
+        if (CONFIG.MOCK_MODE) {
+            document.getElementById('mockControls').classList.remove('hidden');
+        }
+    }
+
+    setupEventListeners() {
+        // Start button
+        document.getElementById('startButton').addEventListener('click', () => {
+            this.startApp();
+        });
+
+        // Mock mode controls
+        if (CONFIG.MOCK_MODE) {
+            document.getElementById('mockEmojiA').addEventListener('change', (e) => {
+                this.handleMockEmojiChange('A', e.target.value);
+            });
+            document.getElementById('mockEmojiB').addEventListener('change', (e) => {
+                this.handleMockEmojiChange('B', e.target.value);
+            });
+        }
+
+        // Music player controls
+        document.getElementById('playPauseButton').addEventListener('click', () => {
+            this.musicPlayer.togglePlayPause();
+        });
+
+        document.getElementById('nextButton').addEventListener('click', () => {
+            this.musicPlayer.next();
+        });
+
+        document.getElementById('prevButton').addEventListener('click', () => {
+            this.musicPlayer.prev();
+        });
+
+        document.getElementById('volumeSlider').addEventListener('input', (e) => {
+            const volume = e.target.value / 100;
+            this.musicPlayer.setVolume(volume);
+        });
+
+        document.getElementById('progressBar').addEventListener('input', (e) => {
+            if (this.musicPlayer.audio.duration) {
+                const time = (e.target.value / 100) * this.musicPlayer.audio.duration;
+                this.musicPlayer.audio.currentTime = time;
+            }
+        });
+
+        // Low power toggle
+        document.getElementById('lowPowerToggle').addEventListener('change', (e) => {
+            this.detectionInterval = 1000 / (e.target.checked ? CONFIG.LOW_POWER_FPS : CONFIG.DETECTION_FPS);
+        });
+    }
+
+    async startApp() {
+        // Hide start overlay
+        document.getElementById('startOverlay').classList.add('hidden');
+        document.getElementById('app').classList.remove('hidden');
+
+        // Update status
+        this.updateStatus('Loading Model...');
+
+        // Load model
+        const modelLoaded = await this.modelAdapter.loadModel();
+        if (!modelLoaded && !CONFIG.MOCK_MODE) {
+            this.updateStatus('Model failed to load');
+            return;
+        }
+
+        // Start camera (if not in mock mode)
+        if (!CONFIG.MOCK_MODE) {
+            await this.startCamera();
+        } else {
+            this.updateStatus('Mock Mode Active');
+        }
+
+        // Start detection loop
+        this.startDetection();
+    }
+
+    async startCamera() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: 'environment', // Rear camera
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
                 }
+            });
+
+            this.video.srcObject = stream;
+            this.updateStatus('Camera Ready');
+            
+            // Set canvas size to match video
+            this.video.addEventListener('loadedmetadata', () => {
+                this.canvas.width = this.video.videoWidth;
+                this.canvas.height = this.video.videoHeight;
+            });
+        } catch (error) {
+            console.error('Camera error:', error);
+            this.updateStatus('Camera Error');
+            // Fall back to mock mode
+            CONFIG.MOCK_MODE = true;
+            document.getElementById('mockControls').classList.remove('hidden');
+        }
+    }
+
+    startDetection() {
+        this.isDetecting = true;
+        this.detectionLoop();
+    }
+
+    async detectionLoop() {
+        if (!this.isDetecting) return;
+
+        const now = Date.now();
+        const shouldDetect = (now - this.lastDetectionTime) >= this.detectionInterval;
+
+        if (shouldDetect) {
+            this.lastDetectionTime = now;
+
+            if (CONFIG.MOCK_MODE) {
+                // Mock mode: use dropdown values
+                const mockA = document.getElementById('mockEmojiA').value || null;
+                const mockB = document.getElementById('mockEmojiB').value || null;
+                this.updateEmojiDisplay(mockA, mockB);
+                
+                // Update combo if changed
+                const comboKey = this.getComboKeyFromEmojis(mockA, mockB);
+                this.musicPlayer.switchPlaylist(comboKey);
             } else {
-                // Last found target is lost, switch to another detected target
-                const availableTargets = Array.from(state.detectedTargets);
-                if (availableTargets.length > 0) {
-                    const newTarget = availableTargets[0];
-                    playAudioForTarget(newTarget);
-                    state.lastFoundIndex = newTarget;
+                // Real detection
+                this.updateStatus('Scanning...');
+                
+                // Capture frame
+                this.ctx.drawImage(this.video, 0, 0, this.canvas.width, this.canvas.height);
+                
+                // Predict
+                const predictions = await this.modelAdapter.predict(this.canvas);
+                
+                // Update state with smoothing
+                const stateChanged = this.detectionState.update(predictions);
+                
+                if (stateChanged) {
+                    this.updateEmojiDisplay(
+                        this.detectionState.emojiA,
+                        this.detectionState.emojiB
+                    );
+                    
+                    // Switch playlist if combo changed
+                    const comboKey = this.detectionState.getComboKey();
+                    this.musicPlayer.switchPlaylist(comboKey);
+                    
+                    if (this.detectionState.emojiA && this.detectionState.emojiB) {
+                        this.updateStatus('Two Emojis Detected');
+                    } else if (this.detectionState.emojiA || this.detectionState.emojiB) {
+                        this.updateStatus('One Emoji Detected');
+                    }
                 }
             }
         }
+
+        requestAnimationFrame(() => this.detectionLoop());
     }
 
-    // ============================================
-    // Video Management
-    // ============================================
-    /**
-     * Play video for a specific target
-     */
-    function playVideoForTarget(targetIndex) {
-        const video = videoElements[targetIndex];
-        if (!video) return;
+    handleMockEmojiChange(side, emoji) {
+        const emojiA = side === 'A' ? emoji : document.getElementById('mockEmojiA').value || null;
+        const emojiB = side === 'B' ? emoji : document.getElementById('mockEmojiB').value || null;
+        
+        this.updateEmojiDisplay(emojiA, emojiB);
+        
+        const comboKey = this.getComboKeyFromEmojis(emojiA, emojiB);
+        this.musicPlayer.switchPlaylist(comboKey);
+    }
 
-        const videoEl = video.getObject3D('mesh').material.map.image;
-        if (videoEl && videoEl.tagName === 'VIDEO') {
-            videoEl.currentTime = 0;
-            videoEl.play().catch(err => {
-                console.warn(`Failed to play video for target ${targetIndex}:`, err);
-            });
+    getComboKeyFromEmojis(emojiA, emojiB) {
+        const emojis = [emojiA, emojiB].filter(e => e && e !== '');
+        if (emojis.length === 0) return 'DEFAULT';
+        if (emojis.length === 1) return `${emojis[0]}|—`;
+        const sorted = emojis.sort();
+        return sorted.join('|');
+    }
+
+    updateEmojiDisplay(emojiA, emojiB) {
+        const emojiAEl = document.getElementById('emojiA');
+        const emojiBEl = document.getElementById('emojiB');
+        const labelAEl = document.getElementById('emojiALabel');
+        const labelBEl = document.getElementById('emojiBLabel');
+
+        emojiAEl.textContent = emojiA || '—';
+        emojiBEl.textContent = emojiB || '—';
+        
+        // Update labels (you can customize these)
+        labelAEl.textContent = emojiA ? `(${this.getEmojiName(emojiA)})` : '';
+        labelBEl.textContent = emojiB ? `(${this.getEmojiName(emojiB)})` : '';
+    }
+
+    getEmojiName(emoji) {
+        const names = {
+            '😄': 'Happy',
+            '😈': 'Devil',
+            '🎵': 'Music',
+            '🔥': 'Fire',
+            '❤️': 'Heart',
+            '⭐': 'Star'
+        };
+        return names[emoji] || 'Unknown';
+    }
+
+    updateStatus(text) {
+        const statusEl = document.getElementById('statusText');
+        if (statusEl) {
+            statusEl.textContent = text;
         }
     }
+}
 
-    /**
-     * Pause video for a specific target
-     */
-    function pauseVideoForTarget(targetIndex) {
-        const video = videoElements[targetIndex];
-        if (!video) return;
+// ============================================================================
+// Initialize App
+// ============================================================================
 
-        const videoEl = video.getObject3D('mesh').material.map.image;
-        if (videoEl && videoEl.tagName === 'VIDEO') {
-            videoEl.pause();
-        }
-    }
+let app;
 
-    // ============================================
-    // A-Frame Custom Component
-    // ============================================
-    AFRAME.registerComponent('target-controller', {
-        schema: {
-            targetIndex: { type: 'number', default: 0 }
-        },
-
-        init: function() {
-            this.targetIndex = this.data.targetIndex;
-            this.isDetected = false;
-            
-            // Listen for MindAR events
-            this.el.addEventListener('targetFound', () => {
-                this.onTargetFound();
-            });
-            
-            this.el.addEventListener('targetLost', () => {
-                this.onTargetLost();
-            });
-        },
-
-        onTargetFound: function() {
-            if (this.isDetected) return;
-            this.isDetected = true;
-            
-            if (state.debugMode) {
-                console.log(`Target ${this.targetIndex} found`);
-            }
-            
-            // Add to detected targets
-            state.detectedTargets.add(this.targetIndex);
-            state.lastFoundIndex = this.targetIndex;
-            
-            // Play video
-            playVideoForTarget(this.targetIndex);
-            
-            // Update audio playback
-            updateAudioPlayback();
-            
-            // Update UI
-            updateStatus();
-        },
-
-        onTargetLost: function() {
-            if (!this.isDetected) return;
-            this.isDetected = false;
-            
-            if (state.debugMode) {
-                console.log(`Target ${this.targetIndex} lost`);
-            }
-            
-            // Remove from detected targets
-            state.detectedTargets.delete(this.targetIndex);
-            
-            // Pause video
-            pauseVideoForTarget(this.targetIndex);
-            
-            // Update audio playback
-            updateAudioPlayback();
-            
-            // Update UI
-            updateStatus();
-        }
-    });
-
-    // ============================================
-    // Target Entity Creation
-    // ============================================
-    /**
-     * Create A-Frame entities for all 12 targets
-     */
-    function createTargetEntities() {
-        const scene = elements.scene;
-        
-        for (let i = 0; i < 12; i++) {
-            // Create entity for this target
-            const entity = document.createElement('a-entity');
-            entity.setAttribute('mindar-image-target', `targetIndex: ${i}`);
-            entity.setAttribute('target-controller', `targetIndex: ${i}`);
-            
-            // Create video plane
-            const videoPlane = document.createElement('a-plane');
-            videoPlane.setAttribute('width', '1');
-            videoPlane.setAttribute('height', '1');
-            videoPlane.setAttribute('position', '0 0 0.03');
-            videoPlane.setAttribute('rotation', '0 0 0');
-            videoPlane.setAttribute('material', `shader: flat; src: ./v${i}.mp4; autoplay: false; loop: true; playsinline: true; muted: true`);
-            
-            entity.appendChild(videoPlane);
-            scene.appendChild(entity);
-            
-            // Store reference
-            videoElements[i] = videoPlane;
-        }
-    }
-
-    // ============================================
-    // UI Updates
-    // ============================================
-    /**
-     * Update status indicator
-     */
-    function updateStatus() {
-        const count = state.detectedTargets.size;
-        
-        if (count === 0) {
-            elements.statusText.textContent = 'Scanning';
-            elements.statusIndicator.className = 'status-indicator scanning';
-            elements.statusDetail.textContent = '';
-        } else {
-            elements.statusText.textContent = 'Target Detected';
-            elements.statusIndicator.className = 'status-indicator detected';
-            if (count > 1) {
-                elements.statusDetail.textContent = `${count} targets`;
-            } else {
-                elements.statusDetail.textContent = '';
-            }
-        }
-    }
-
-    /**
-     * Update status detail text
-     */
-    function updateStatusDetail(text) {
-        elements.statusDetail.textContent = text;
-    }
-
-    /**
-     * Update mute button state
-     */
-    function updateMuteButton() {
-        if (state.audioMuted) {
-            elements.muteBtn.textContent = '🔇';
-            elements.muteBtn.classList.add('muted');
-        } else {
-            elements.muteBtn.textContent = '🔊';
-            elements.muteBtn.classList.remove('muted');
-        }
-    }
-
-    // ============================================
-    // User Interaction
-    // ============================================
-    /**
-     * Handle tap to start
-     */
-    function handleTapToStart() {
-        if (state.initialized) return;
-        
-        // Unlock video playback
-        for (let i = 0; i < 12; i++) {
-            const video = videoElements[i];
-            if (video) {
-                const videoEl = video.getObject3D('mesh').material.map.image;
-                if (videoEl && videoEl.tagName === 'VIDEO') {
-                    videoEl.muted = true;
-                    videoEl.playsInline = true;
-                    videoEl.loop = true;
-                    // Attempt play/pause to unlock
-                    videoEl.play().then(() => {
-                        videoEl.pause();
-                    }).catch(() => {});
-                }
-            }
-        }
-        
-        // Unlock audio playback
-        for (let i = 0; i < 12; i++) {
-            const audio = audioElements[i];
-            if (audio) {
-                audio.muted = false;
-                // Attempt play/pause to unlock
-                audio.play().then(() => {
-                    audio.pause();
-                    audio.currentTime = 0;
-                }).catch(() => {});
-            }
-        }
-        
-        // Hide overlay, show UI and scene
-        elements.startOverlay.style.display = 'none';
-        elements.ui.style.display = 'block';
-        elements.scene.style.display = 'block';
-        
-        // Start AR system
-        const arSystem = elements.scene.systems['mindar-image-system'];
-        if (arSystem) {
-            arSystem.start().then(() => {
-                state.arReady = true;
-                updateStatus();
-            }).catch(err => {
-                console.error('Failed to start AR system:', err);
-                alert('Failed to start AR. Please ensure camera permissions are granted.');
-            });
-        }
-        
-        state.initialized = true;
-    }
-
-    /**
-     * Toggle mute/unmute
-     */
-    function toggleMute() {
-        state.audioMuted = !state.audioMuted;
-        
-        if (state.audioMuted) {
-            // Mute: stop all audio
-            if (state.currentAudioIndex !== null) {
-                stopAudioForTarget(state.currentAudioIndex);
-            }
-        } else {
-            // Unmute: resume audio if target is detected
-            updateAudioPlayback();
-        }
-        
-        updateMuteButton();
-    }
-
-    /**
-     * Toggle debug mode
-     */
-    function toggleDebug() {
-        state.debugMode = !state.debugMode;
-        
-        const arSystem = elements.scene.systems['mindar-image-system'];
-        if (arSystem) {
-            arSystem.ui = state.debugMode;
-        }
-        
-        elements.debugBtn.style.backgroundColor = state.debugMode 
-            ? '#A238FF' 
-            : 'rgba(162, 56, 255, 0.2)';
-        
-        if (state.debugMode) {
-            console.log('Debug mode enabled');
-        }
-    }
-
-    /**
-     * Show help modal
-     */
-    function showHelp() {
-        elements.helpModal.style.display = 'flex';
-    }
-
-    /**
-     * Hide help modal
-     */
-    function hideHelp() {
-        elements.helpModal.style.display = 'none';
-    }
-
-    // ============================================
-    // Initialization
-    // ============================================
-    /**
-     * Initialize the application
-     */
-    function init() {
-        // Initialize audio elements
-        initAudioElements();
-        
-        // Wait for A-Frame scene to load
-        elements.scene.addEventListener('loaded', () => {
-            // Create target entities
-            createTargetEntities();
-            initVideoElements();
-        });
-        
-        // Event listeners
-        elements.startOverlay.addEventListener('click', handleTapToStart);
-        elements.startOverlay.addEventListener('touchend', handleTapToStart);
-        
-        elements.muteBtn.addEventListener('click', toggleMute);
-        elements.debugBtn.addEventListener('click', toggleDebug);
-        elements.helpBtn.addEventListener('click', showHelp);
-        elements.closeHelp.addEventListener('click', hideHelp);
-        
-        // Close help modal on background click
-        elements.helpModal.addEventListener('click', (e) => {
-            if (e.target === elements.helpModal) {
-                hideHelp();
-            }
-        });
-        
-        // Initial UI state
-        updateMuteButton();
-        elements.statusText.textContent = 'Ready';
-        
-        // Prevent context menu on long press
-        document.addEventListener('contextmenu', (e) => e.preventDefault());
-        
-        console.log('CUBE AR initialized');
-    }
-
-    // Start initialization when DOM is ready
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
-    } else {
-        init();
-    }
-
-})();
+document.addEventListener('DOMContentLoaded', () => {
+    app = new AppController();
+});
