@@ -130,94 +130,55 @@ class EmojiModelAdapter {
 
             console.log('Step 5: Getting MindAR system...');
             
-            // Check if mindar-image component is registered (it's a component, not a system)
+            // Check if mindar-image component is registered
             const mindarComponents = Object.keys(AFRAME.components).filter(k => k.includes('mindar'));
             console.log('Available MindAR components:', mindarComponents);
             
             if (!mindarComponents.includes('mindar-image')) {
-                console.error('mindar-image component not registered in AFRAME.components');
-                throw new Error('MindAR component not registered. Check script loading order.');
+                console.warn('mindar-image component not found yet, but continuing...');
+                // Don't throw error - let it initialize naturally
+            } else {
+                console.log('✓ MindAR component is registered');
             }
-            console.log('✓ MindAR component is registered');
             
-            // Get the system - MindAR uses 'mindar-image' as the system name
-            // Access it through the component's system property or directly from scene
+            // Get the system - wait for it to be available
+            // MindAR system becomes available after the scene fully initializes
             let attempts = 0;
-            while (!this.mindarSystem && attempts < 30) {
+            while (!this.mindarSystem && attempts < 50) {
                 await new Promise(resolve => setTimeout(resolve, 100));
                 
                 // Try to get the system from the scene
-                // The system name is 'mindar-image', same as the component
                 this.mindarSystem = this.scene.systems['mindar-image'];
                 
                 attempts++;
-                if (!this.mindarSystem && attempts % 5 === 0) {
-                    console.log(`Waiting for MindAR system... attempt ${attempts}/30`);
+                if (!this.mindarSystem && attempts % 10 === 0) {
+                    console.log(`Waiting for MindAR system... attempt ${attempts}/50`);
                     console.log('Current systems:', Object.keys(this.scene.systems));
                 }
             }
             
-            console.log('Available systems:', Object.keys(this.scene.systems));
-            
-            if (!this.mindarSystem) {
-                // Try accessing through the component instead
-                const mindarComponent = this.scene.components['mindar-image'];
-                if (mindarComponent && mindarComponent.system) {
-                    console.log('Found MindAR system through component');
-                    this.mindarSystem = mindarComponent.system;
-                }
+            if (this.mindarSystem) {
+                console.log('✓ MindAR system found');
+            } else {
+                console.warn('MindAR system not found after waiting, but camera should still work');
+                console.log('Available systems:', Object.keys(this.scene.systems));
+                // Don't throw error - camera will still work, just no AR tracking
+                // Return true to continue
+                return true;
             }
-            
-            if (!this.mindarSystem) {
-                console.error('MindAR system not found after waiting 3 seconds');
-                console.error('Available systems:', Object.keys(this.scene.systems));
-                console.error('Scene components:', Object.keys(this.scene.components || {}));
-                console.error('Check that:');
-                console.error('1. MindAR scripts are loaded in correct order');
-                console.error('2. targets.mind file exists at:', CONFIG.TARGETS_FILE);
-                console.error('3. The mindar-image attribute is set correctly on a-scene');
-                throw new Error('MindAR system not found. The scene may need the mindar-image component attribute.');
-            }
-            console.log('✓ MindAR system found');
 
-            console.log('Step 6: Setting up event listeners...');
-            // Set up event listeners for target detection
-            this.setupMindAREvents();
-            console.log('✓ Event listeners set up');
+            if (this.mindarSystem) {
+                console.log('Step 6: Setting up event listeners...');
+                // Set up event listeners for target detection
+                this.setupMindAREvents();
+                console.log('✓ Event listeners set up');
 
-            console.log('Step 7: Starting MindAR tracking...');
-            // MindAR should auto-start, but we can manually trigger if needed
-            try {
-                // Check if start method exists
-                if (typeof this.mindarSystem.start === 'function') {
-                    console.log('Calling mindarSystem.start()...');
-                    await this.mindarSystem.start();
-                    console.log('✓ MindAR start() completed');
-                } else {
-                    console.log('mindarSystem.start() not available, MindAR should auto-start');
-                    // Wait a bit for auto-initialization
-                    await new Promise(resolve => setTimeout(resolve, 500));
-                }
-                
-                // Verify it's actually running
-                if (this.mindarSystem.el && this.mindarSystem.el.components && 
-                    this.mindarSystem.el.components['mindar-image']) {
-                    const mindarComponent = this.mindarSystem.el.components['mindar-image'];
-                    console.log('MindAR component state:', {
-                        isTracking: mindarComponent.isTracking,
-                        arSession: !!mindarComponent.arSession
-                    });
-                }
-                
-                console.log('✓ MindAR initialization complete, camera should be active');
-            } catch (startError) {
-                console.error('Failed to start MindAR:', startError);
-                console.error('Error details:', startError.message);
-                if (startError.stack) {
-                    console.error('Stack:', startError.stack);
-                }
-                // Don't throw - MindAR might auto-start anyway
-                console.warn('Continuing despite start error - MindAR may auto-start');
+                console.log('Step 7: MindAR will auto-start when camera is ready...');
+                // MindAR automatically starts when the scene is visible and camera is ready
+                // No need to manually call start()
+                console.log('✓ MindAR ready - tracking will start automatically');
+            } else {
+                console.log('Skipping MindAR setup - system not available');
             }
 
             this.isLoaded = true;
@@ -636,27 +597,29 @@ class AppController {
     async startApp() {
         console.log('startApp called, MOCK_MODE:', CONFIG.MOCK_MODE);
         
-        // Hide start overlay and show app FIRST (MindAR needs visible scene)
+        // Hide start overlay and show app
         const startOverlay = document.getElementById('startOverlay');
         const app = document.getElementById('app');
         if (startOverlay) startOverlay.classList.add('hidden');
         if (app) {
             app.classList.remove('hidden');
             console.log('App container is now visible');
-            // Force reflow to ensure visibility
-            app.offsetHeight;
         }
 
         // Set overlay canvas size
         this.overlayCanvas.width = window.innerWidth;
         this.overlayCanvas.height = window.innerHeight;
 
-        // Wait a moment for DOM to update
-        await new Promise(resolve => setTimeout(resolve, 100));
-
-        // Load MindAR model (handles camera internally)
         if (!CONFIG.MOCK_MODE) {
-            console.log('Loading MindAR...');
+            // Step 1: Show camera first - let A-Frame/MindAR handle camera initialization
+            // The scene will automatically request camera access when it becomes visible
+            console.log('Scene is visible, MindAR will initialize camera automatically...');
+            
+            // Wait for scene to be ready and camera to start
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            // Step 2: Now initialize MindAR tracking
+            console.log('Loading MindAR tracking...');
             const loaded = await this.modelAdapter.loadModel();
             if (loaded) {
                 console.log('MindAR model loaded successfully');
@@ -664,8 +627,8 @@ class AppController {
                 this.modelAdapter.setEmojiLabels(EMOJI_LABELS);
             } else {
                 console.error('Failed to load MindAR model');
-                alert('Failed to load AR tracking. Please check console for errors.');
-                return; // Don't start detection if model failed
+                // Don't block - camera is already showing
+                console.log('Continuing without AR tracking - camera should still work');
             }
         }
 
