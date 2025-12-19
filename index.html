@@ -50,6 +50,50 @@
         </a-scene>
     </div>
     <canvas id="overlayCanvas"></canvas>
+    
+    <!-- Floating Transparent Media Player Bar -->
+    <div id="mediaPlayerBar" class="media-player-bar hidden">
+        <div class="media-player-content">
+            <!-- Track Info -->
+            <div class="track-info">
+                <div class="track-title" id="trackTitle">No track</div>
+                <div class="track-artist" id="trackArtist">No artist</div>
+            </div>
+            
+            <!-- Controls -->
+            <div class="media-controls">
+                <button id="prevButton" class="media-btn" aria-label="Previous track">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/>
+                    </svg>
+                </button>
+                <button id="playPauseButton" class="media-btn play-pause-btn" aria-label="Play/Pause">
+                    <svg id="playIcon" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M8 5v14l11-7z"/>
+                    </svg>
+                    <svg id="pauseIcon" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" style="display: none;">
+                        <path d="M6 4h4v16H6zm8 0h4v16h-4z"/>
+                    </svg>
+                </button>
+                <button id="nextButton" class="media-btn" aria-label="Next track">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/>
+                    </svg>
+                </button>
+            </div>
+            
+            <!-- Progress Bar -->
+            <div class="progress-container">
+                <div class="progress-bar">
+                    <div class="progress-filled" id="progressFilled"></div>
+                </div>
+                <div class="time-info">
+                    <span id="currentTime">0:00</span>
+                    <span id="duration">0:00</span>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- App script (loads after all dependencies) -->
     <script src="app.js"></script>

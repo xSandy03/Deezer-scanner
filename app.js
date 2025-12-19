@@ -565,15 +565,21 @@ class MusicPlayer {
      * Update UI elements
      */
     updateTrackInfo(title, artist) {
-        // UI removed - track info no longer displayed
+        // This will be called from AppController to update the media player bar
+        if (window.appController) {
+            window.appController.updateTrackDisplay(title, artist);
+        }
     }
 
     updatePlayButton() {
-        // UI removed - play button no longer displayed
+        // This will be called from AppController to update play/pause button
+        if (window.appController) {
+            window.appController.updatePlayPauseButton();
+        }
     }
 
     updateProgress() {
-        // UI removed - progress bar no longer displayed
+        // Progress is updated via timeupdate event listener in AppController
     }
 
     formatTime(seconds) {
@@ -597,6 +603,17 @@ class AppController {
         this.overlayCanvas = document.getElementById('overlayCanvas');
         this.scene = null;
         
+        // Media player bar elements
+        this.mediaPlayerBar = document.getElementById('mediaPlayerBar');
+        this.playPauseButton = document.getElementById('playPauseButton');
+        this.nextButton = document.getElementById('nextButton');
+        this.prevButton = document.getElementById('prevButton');
+        this.trackTitle = document.getElementById('trackTitle');
+        this.trackArtist = document.getElementById('trackArtist');
+        this.progressFilled = document.getElementById('progressFilled');
+        this.currentTimeEl = document.getElementById('currentTime');
+        this.durationEl = document.getElementById('duration');
+        
         if (!this.overlayCanvas) {
             console.error('Overlay canvas not found!');
             return;
@@ -610,6 +627,7 @@ class AppController {
 
     async init() {
         this.setupEventListeners();
+        this.setupMediaPlayerControls();
     }
 
     setupEventListeners() {
@@ -619,6 +637,105 @@ class AppController {
             startButton.addEventListener('click', () => {
                 this.startApp();
             });
+        }
+    }
+    
+    /**
+     * Set up media player controls
+     */
+    setupMediaPlayerControls() {
+        // Play/Pause button
+        if (this.playPauseButton) {
+            this.playPauseButton.addEventListener('click', () => {
+                this.musicPlayer.togglePlayPause();
+            });
+        }
+        
+        // Next button
+        if (this.nextButton) {
+            this.nextButton.addEventListener('click', () => {
+                this.musicPlayer.next();
+            });
+        }
+        
+        // Previous button
+        if (this.prevButton) {
+            this.prevButton.addEventListener('click', () => {
+                this.musicPlayer.prev();
+            });
+        }
+        
+        // Progress bar click to seek
+        const progressBar = document.querySelector('.progress-bar');
+        if (progressBar) {
+            progressBar.addEventListener('click', (e) => {
+                const rect = progressBar.getBoundingClientRect();
+                const clickX = e.clientX - rect.left;
+                const percentage = clickX / rect.width;
+                const audio = this.musicPlayer.audio;
+                if (audio.duration) {
+                    audio.currentTime = percentage * audio.duration;
+                }
+            });
+        }
+        
+        // Update progress and time regularly
+        this.musicPlayer.audio.addEventListener('timeupdate', () => {
+            this.updateMediaPlayerUI();
+        });
+    }
+    
+    /**
+     * Update media player UI elements
+     */
+    updateMediaPlayerUI() {
+        const audio = this.musicPlayer.audio;
+        
+        // Update progress bar
+        if (this.progressFilled && audio.duration) {
+            const percentage = (audio.currentTime / audio.duration) * 100;
+            this.progressFilled.style.width = `${percentage}%`;
+        }
+        
+        // Update time displays
+        if (this.currentTimeEl) {
+            this.currentTimeEl.textContent = this.musicPlayer.formatTime(audio.currentTime);
+        }
+        if (this.durationEl) {
+            this.durationEl.textContent = this.musicPlayer.formatTime(audio.duration);
+        }
+        
+        // Update play/pause button
+        this.updatePlayPauseButton();
+    }
+    
+    /**
+     * Update play/pause button icon
+     */
+    updatePlayPauseButton() {
+        if (!this.playPauseButton) return;
+        
+        const playIcon = document.getElementById('playIcon');
+        const pauseIcon = document.getElementById('pauseIcon');
+        
+        if (this.musicPlayer.isPlaying) {
+            if (playIcon) playIcon.style.display = 'none';
+            if (pauseIcon) pauseIcon.style.display = 'block';
+        } else {
+            if (playIcon) playIcon.style.display = 'block';
+            if (pauseIcon) pauseIcon.style.display = 'none';
+        }
+    }
+    
+    /**
+     * Update track display in media player bar
+     */
+    updateTrackDisplay(title, artist) {
+        if (this.trackTitle) {
+            this.trackTitle.textContent = title || 'No track';
+        }
+        if (this.trackArtist) {
+            this.trackArtist.textContent = artist || 'No artist';
         }
     }
 
@@ -634,6 +751,11 @@ class AppController {
             console.log('App container is now visible');
             // Force reflow to ensure visibility
             void app.offsetHeight;
+        }
+        
+        // Show media player bar
+        if (this.mediaPlayerBar) {
+            this.mediaPlayerBar.classList.remove('hidden');
         }
 
         // Set overlay canvas size
@@ -829,5 +951,7 @@ let app;
 
 document.addEventListener('DOMContentLoaded', () => {
     app = new AppController();
+    // Make app controller accessible globally for MusicPlayer callbacks
+    window.appController = app;
 });
 
