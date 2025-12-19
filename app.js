@@ -922,6 +922,21 @@ class AppController {
 
         // Start detection loop
         this.startDetection();
+        
+        // Test overlay canvas is working - draw a test indicator
+        setTimeout(() => {
+            this.overlayCtx.fillStyle = 'rgba(255, 0, 0, 0.5)';
+            this.overlayCtx.fillRect(10, 10, 100, 30);
+            this.overlayCtx.fillStyle = '#FFFFFF';
+            this.overlayCtx.font = '16px Arial';
+            this.overlayCtx.fillText('AR Ready', 15, 30);
+            console.log('Test indicator drawn on overlay canvas');
+            
+            // Clear test after 2 seconds
+            setTimeout(() => {
+                this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
+            }, 2000);
+        }, 1000);
     }
 
 
