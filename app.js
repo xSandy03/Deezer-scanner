@@ -213,11 +213,16 @@ class EmojiModelAdapter {
     setupMindAREvents() {
         console.log('Setting up MindAR event listeners...');
         
+        let targetsSetup = false;
+        
         // Listen for arReady event (fires when camera is ready)
         this.scene.addEventListener('arReady', () => {
             console.log('✓ MindAR arReady event fired - camera should be active');
-            this.setupTargetEntities();
-        });
+            if (!targetsSetup) {
+                this.setupTargetEntities();
+                targetsSetup = true;
+            }
+        }, { once: true });
         
         // Listen for arError event
         this.scene.addEventListener('arError', (event) => {
@@ -248,42 +253,65 @@ class EmojiModelAdapter {
         setTimeout(checkCamera, 500);
         setTimeout(checkCamera, 2000);
         
-        // Create target entities after arReady
-        this.scene.addEventListener('arReady', () => {
-            this.setupTargetEntities();
-        }, { once: true });
+        // Also try setting up targets if arReady hasn't fired after a delay
+        setTimeout(() => {
+            if (!targetsSetup && this.scene.hasLoaded) {
+                console.log('Setting up targets after delay (arReady may have already fired)');
+                this.setupTargetEntities();
+                targetsSetup = true;
+            }
+        }, 2000);
     }
     
     setupTargetEntities() {
         console.log('Creating target entities for', this.emojiLabels.length, 'targets');
         
+        // Check if targets already exist
+        const existingTargets = this.scene.querySelectorAll('a-mindar-image-target');
+        if (existingTargets.length > 0) {
+            console.log('Target entities already exist, removing old ones');
+            existingTargets.forEach(el => el.remove());
+        }
+        
         // Create target entities for each emoji (0-5 for 6 emojis)
         for (let i = 0; i < this.emojiLabels.length; i++) {
+            const label = this.emojiLabels[i] || `Target ${i}`;
             const targetEl = document.createElement('a-mindar-image-target');
             targetEl.setAttribute('targetIndex', i);
             targetEl.id = `target-${i}`;
+            targetEl.setAttribute('visible', true);
             
             // Listen for target found/lost events on each target entity
-            targetEl.addEventListener('targetFound', () => {
-                const label = this.emojiLabels[i] || `Target ${i}`;
-                console.log('🎯 Target found:', i, label);
+            targetEl.addEventListener('targetFound', (event) => {
+                console.log(`🎯 Target ${i} (${label}) FOUND!`, event);
                 
                 this.detectedTargets.set(i, {
                     targetIndex: i,
                     label,
                     confidence: 1.0,
-                    found: true
+                    found: true,
+                    timestamp: Date.now()
                 });
+                
+                console.log('Current detected targets:', Array.from(this.detectedTargets.keys()));
             });
             
-            targetEl.addEventListener('targetLost', () => {
-                console.log('❌ Target lost:', i);
+            targetEl.addEventListener('targetLost', (event) => {
+                console.log(`❌ Target ${i} (${label}) LOST`, event);
                 this.detectedTargets.delete(i);
+                console.log('Remaining detected targets:', Array.from(this.detectedTargets.keys()));
             });
             
+            // Add to scene
             this.scene.appendChild(targetEl);
-            console.log(`✓ Created target entity for index ${i}`);
+            console.log(`✓ Created target entity for index ${i} (${label})`);
         }
+        
+        console.log(`✓ All ${this.emojiLabels.length} target entities created and added to scene`);
+        
+        // Verify targets were added
+        const allTargets = this.scene.querySelectorAll('a-mindar-image-target');
+        console.log(`Total target entities in scene: ${allTargets.length}`);
     }
 
     /**
@@ -821,7 +849,12 @@ class AppController {
             const detections = this.modelAdapter.getDetections();
             
             if (detections.length > 0) {
-                console.log('MindAR detections:', detections.length);
+                // Log detections periodically (not every frame)
+                if (this.frameCount === undefined) this.frameCount = 0;
+                this.frameCount++;
+                if (this.frameCount % 30 === 0) { // Log every 30 frames (~1 second at 30fps)
+                    console.log('🎯 MindAR detections:', detections.map(d => `${d.label} (${d.targetIndex})`));
+                }
                 
                 // Convert to format expected by detection state
                 const predictions = detections.map(d => ({
@@ -838,6 +871,7 @@ class AppController {
                 if (stateChanged) {
                     // Switch playlist if combo changed
                     const comboKey = this.detectionState.getComboKey();
+                    console.log('🔄 Switching playlist:', comboKey);
                     this.musicPlayer.switchPlaylist(comboKey);
                 }
             } else {
