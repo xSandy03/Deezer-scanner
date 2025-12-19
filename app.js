@@ -192,6 +192,9 @@ class EmojiModelAdapter {
                 console.log('Skipping MindAR setup - system not available, but scene should still show camera');
             }
 
+            // Ensure video elements are properly configured for mobile
+            this.ensureVideoPlayback();
+            
             this.isLoaded = true;
             console.log('✓ MindAR loaded and started successfully');
             
@@ -299,6 +302,83 @@ class EmojiModelAdapter {
         return detections;
     }
 
+    /**
+     * Ensure video elements are properly configured and playing on mobile
+     */
+    ensureVideoPlayback() {
+        console.log('Ensuring video playback for mobile...');
+        
+        const findAndFixVideo = () => {
+            // Find all video elements in the scene
+            const videos = this.scene.querySelectorAll('video');
+            const allVideos = document.querySelectorAll('video');
+            
+            console.log(`Found ${videos.length} video(s) in scene, ${allVideos.length} total`);
+            
+            // Process all video elements (including ones MindAR creates)
+            allVideos.forEach((video, index) => {
+                console.log(`Configuring video ${index}:`, {
+                    id: video.id,
+                    paused: video.paused,
+                    readyState: video.readyState,
+                    srcObject: !!video.srcObject,
+                    playsinline: video.playsInline,
+                    autoplay: video.autoplay,
+                    muted: video.muted
+                });
+                
+                // Set mobile-specific attributes
+                video.setAttribute('playsinline', 'true');
+                video.setAttribute('webkit-playsinline', 'true');
+                video.setAttribute('autoplay', 'true');
+                video.setAttribute('muted', 'true');
+                
+                // Ensure muted property is set (required for autoplay)
+                video.muted = true;
+                
+                // Force play the video
+                const playPromise = video.play();
+                if (playPromise !== undefined) {
+                    playPromise.then(() => {
+                        console.log(`✓ Video ${index} is playing`);
+                    }).catch(error => {
+                        console.warn(`⚠ Could not autoplay video ${index}:`, error);
+                        // Try again after user interaction might have occurred
+                        setTimeout(() => {
+                            video.play().catch(e => console.warn(`Retry play failed:`, e));
+                        }, 500);
+                    });
+                }
+                
+                // Ensure video is visible
+                video.style.position = 'fixed';
+                video.style.top = '0';
+                video.style.left = '0';
+                video.style.width = '100vw';
+                video.style.height = '100vh';
+                video.style.objectFit = 'cover';
+                video.style.display = 'block';
+                video.style.visibility = 'visible';
+                video.style.opacity = '1';
+                video.style.zIndex = '0';
+            });
+        };
+        
+        // Try immediately and with delays (MindAR creates video elements asynchronously)
+        findAndFixVideo();
+        setTimeout(findAndFixVideo, 500);
+        setTimeout(findAndFixVideo, 1000);
+        setTimeout(findAndFixVideo, 2000);
+        
+        // Also listen for arReady to fix video when camera starts
+        if (this.scene) {
+            this.scene.addEventListener('arReady', () => {
+                console.log('arReady event - fixing video elements');
+                setTimeout(findAndFixVideo, 100);
+            });
+        }
+    }
+    
     /**
      * Update emoji labels mapping
      * @param {Array<string>} labels - Array of emoji labels

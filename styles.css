@@ -131,10 +131,13 @@ a-scene canvas {
     pointer-events: auto !important;
 }
 
-/* A-Frame video element (camera stream) */
+/* A-Frame video element (camera stream) - target all video elements */
+video,
 #arScene video,
 a-scene#arScene video,
-a-scene video {
+a-scene video,
+body video,
+.app-container video {
     position: fixed !important;
     top: 0 !important;
     left: 0 !important;
@@ -148,8 +151,12 @@ a-scene video {
     display: block !important;
     visibility: visible !important;
     opacity: 1 !important;
-    z-index: 0;
+    z-index: 0 !important;
     pointer-events: auto !important;
+    background-color: transparent !important;
+    /* Force mobile video attributes via CSS */
+    -webkit-playsinline: true;
+    playsinline: true;
 }
 
 /* Mobile-specific fixes */
