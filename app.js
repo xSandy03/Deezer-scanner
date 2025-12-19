@@ -123,25 +123,37 @@ class EmojiModelAdapter {
      * Set up MindAR event listeners for target tracking
      */
     setupMindAREvents() {
-        // Listen for target found events
-        this.scene.addEventListener('targetFound', (event) => {
-            const targetIndex = event.detail.targetIndex;
-            const label = this.emojiLabels[targetIndex] || `Target ${targetIndex}`;
-            console.log('Target found:', targetIndex, label);
+        // MindAR fires events on individual target entities
+        // We need to listen to all target entities in the scene
+        this.scene.addEventListener('arReady', () => {
+            console.log('MindAR ready, setting up target listeners');
             
-            this.detectedTargets.set(targetIndex, {
-                targetIndex,
-                label,
-                confidence: 1.0, // MindAR doesn't provide confidence, assume 1.0 when found
-                found: true
-            });
-        });
-
-        // Listen for target lost events
-        this.scene.addEventListener('targetLost', (event) => {
-            const targetIndex = event.detail.targetIndex;
-            console.log('Target lost:', targetIndex);
-            this.detectedTargets.delete(targetIndex);
+            // Create target entities for each emoji (0-5 for 6 emojis)
+            for (let i = 0; i < this.emojiLabels.length; i++) {
+                const targetEl = document.createElement('a-mindar-image-target');
+                targetEl.setAttribute('targetIndex', i);
+                targetEl.id = `target-${i}`;
+                
+                // Listen for target found/lost events on each target entity
+                targetEl.addEventListener('targetFound', () => {
+                    const label = this.emojiLabels[i] || `Target ${i}`;
+                    console.log('Target found:', i, label);
+                    
+                    this.detectedTargets.set(i, {
+                        targetIndex: i,
+                        label,
+                        confidence: 1.0,
+                        found: true
+                    });
+                });
+                
+                targetEl.addEventListener('targetLost', () => {
+                    console.log('Target lost:', i);
+                    this.detectedTargets.delete(i);
+                });
+                
+                this.scene.appendChild(targetEl);
+            }
         });
     }
 
