@@ -920,15 +920,6 @@ class AppController {
             }
         }
 
-        // Draw status immediately and keep drawing it
-        const drawStatusLoop = () => {
-            if (this.overlayCanvas && this.overlayCtx) {
-                this.drawDetectionStatus(0);
-            }
-            setTimeout(drawStatusLoop, 100); // Redraw every 100ms to ensure it stays visible
-        };
-        setTimeout(drawStatusLoop, 500);
-        
         // Start detection loop
         this.startDetection();
     }
@@ -1012,55 +1003,25 @@ class AppController {
         if (this.overlayCanvas.width !== window.innerWidth || this.overlayCanvas.height !== window.innerHeight) {
             this.overlayCanvas.width = window.innerWidth;
             this.overlayCanvas.height = window.innerHeight;
-            console.log('Canvas resized to:', this.overlayCanvas.width, this.overlayCanvas.height);
         }
-
-        console.log('Drawing status, canvas size:', this.overlayCanvas.width, 'x', this.overlayCanvas.height);
 
         // Always show "Move camera towards Mood Cubes" message
         const statusText = 'Move camera towards Mood Cubes';
-        
-        // Use Deezer purple color #A238FF
-        const bgColor = '#A238FF'; // Solid purple
         
         // Set font - use system font as fallback if Deezer font doesn't load
         this.overlayCtx.font = 'bold 28px "Deezer Product", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif';
         this.overlayCtx.textAlign = 'center';
         this.overlayCtx.textBaseline = 'middle';
         
-        const textMetrics = this.overlayCtx.measureText(statusText);
-        const textWidth = textMetrics.width;
-        const textHeight = 32;
-        const padding = 20;
         const margin = 40;
         
         // Center horizontally, position at bottom
         const x = this.overlayCanvas.width / 2;
         const y = this.overlayCanvas.height - margin;
         
-        // Draw background rectangle
-        const rectX = x - (textWidth / 2) - padding;
-        const rectY = y - (textHeight / 2) - padding;
-        const rectWidth = textWidth + (padding * 2);
-        const rectHeight = textHeight + (padding * 2);
-        
-        // Draw background
-        this.overlayCtx.fillStyle = bgColor;
-        this.overlayCtx.fillRect(rectX, rectY, rectWidth, rectHeight);
-        
-        // Draw status text in white with stroke for visibility
-        this.overlayCtx.fillStyle = '#FFFFFF';
-        this.overlayCtx.strokeStyle = '#000000';
-        this.overlayCtx.lineWidth = 2;
-        this.overlayCtx.strokeText(statusText, x, y);
+        // Draw status text in purple (#A238FF) - no background box
+        this.overlayCtx.fillStyle = '#A238FF';
         this.overlayCtx.fillText(statusText, x, y);
-        
-        // Force canvas to update
-        this.overlayCanvas.style.display = 'block';
-        this.overlayCanvas.style.visibility = 'visible';
-        this.overlayCanvas.style.opacity = '1';
-        
-        console.log('Status drawn - bg at:', rectX, rectY, rectWidth, 'x', rectHeight, 'text at:', x, y, 'text:', statusText);
     }
 
     /**
