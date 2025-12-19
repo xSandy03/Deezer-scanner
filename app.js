@@ -639,14 +639,15 @@ class AppController {
                     
                     // Draw bounding boxes and labels on overlay
                     this.drawDetections(predictions);
-                
-                // Update state with smoothing (use top detection)
-                const stateChanged = this.detectionState.update(predictions);
-                
-                if (stateChanged) {
-                    // Switch playlist if combo changed
-                    const comboKey = this.detectionState.getComboKey();
-                    this.musicPlayer.switchPlaylist(comboKey);
+                    
+                    // Update state with smoothing (use top detection)
+                    const stateChanged = this.detectionState.update(predictions);
+                    
+                    if (stateChanged) {
+                        // Switch playlist if combo changed
+                        const comboKey = this.detectionState.getComboKey();
+                        this.musicPlayer.switchPlaylist(comboKey);
+                    }
                 }
             }
         }
@@ -700,7 +701,10 @@ class AppController {
 
         // Draw each detection
         detections.forEach((detection, index) => {
-            if (!detection.bbox) return;
+            if (!detection.bbox) {
+                console.warn('Detection missing bbox:', detection);
+                return;
+            }
 
             const bbox = detection.bbox;
             

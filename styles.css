@@ -110,7 +110,8 @@ body {
     width: 100vw;
     height: 100vh;
     pointer-events: none;
-    z-index: 10;
+    z-index: 100;
+    display: block;
 }
 
 /* Mobile Optimizations */
