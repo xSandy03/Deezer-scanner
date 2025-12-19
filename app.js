@@ -909,28 +909,49 @@ class AppController {
             const confidenceText = `${Math.round(detection.confidence * 100)}%`;
             const fullText = `${labelText} ${confidenceText}`;
             
-            this.overlayCtx.font = 'bold 32px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+            // Use larger, bolder font for better visibility
+            this.overlayCtx.font = 'bold 48px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
             const textMetrics = this.overlayCtx.measureText(fullText);
             const textWidth = textMetrics.width;
-            const textHeight = 40;
-            const padding = 15;
+            const textHeight = 50;
+            const padding = 20;
+            const borderRadius = 12;
             
             // Position labels at top center, staggered
             const x = (this.overlayCanvas.width - textWidth) / 2;
-            const y = 80 + (index * (textHeight + padding + 20));
+            const y = 100 + (index * (textHeight + padding + 30));
             
-            // Draw label background rectangle
-            this.overlayCtx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-            this.overlayCtx.fillRect(
+            // Draw label background rectangle with rounded corners effect
+            this.overlayCtx.fillStyle = 'rgba(162, 56, 255, 0.9)'; // Purple with transparency
+            // Draw rounded rectangle (approximation)
+            this.overlayCtx.beginPath();
+            this.overlayCtx.roundRect(
                 x - padding,
                 y - textHeight - padding,
                 textWidth + (padding * 2),
-                textHeight + (padding * 2)
+                textHeight + (padding * 2),
+                borderRadius
             );
+            this.overlayCtx.fill();
+            
+            // Add subtle border
+            this.overlayCtx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+            this.overlayCtx.lineWidth = 2;
+            this.overlayCtx.stroke();
 
-            // Draw label text
+            // Draw label text with shadow for better visibility
+            this.overlayCtx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+            this.overlayCtx.shadowBlur = 4;
+            this.overlayCtx.shadowOffsetX = 2;
+            this.overlayCtx.shadowOffsetY = 2;
             this.overlayCtx.fillStyle = '#FFFFFF';
             this.overlayCtx.fillText(fullText, x, y);
+            
+            // Reset shadow
+            this.overlayCtx.shadowColor = 'transparent';
+            this.overlayCtx.shadowBlur = 0;
+            this.overlayCtx.shadowOffsetX = 0;
+            this.overlayCtx.shadowOffsetY = 0;
         });
     }
 
