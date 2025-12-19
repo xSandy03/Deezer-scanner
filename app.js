@@ -115,17 +115,27 @@ class EmojiModelAdapter {
             console.log('✓ Scene is loaded');
 
             console.log('Step 5: Getting MindAR system...');
-            // Wait a bit for systems to register
-            await new Promise(resolve => setTimeout(resolve, 100));
+            // Wait longer for systems to register (MindAR can take a moment)
+            let attempts = 0;
+            while (!this.mindarSystem && attempts < 20) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+                this.mindarSystem = this.scene.systems['mindar-image-system'];
+                attempts++;
+                if (!this.mindarSystem) {
+                    console.log(`Waiting for MindAR system... attempt ${attempts}/20`);
+                }
+            }
             
-            // Get MindAR system
-            this.mindarSystem = this.scene.systems['mindar-image-system'];
             console.log('Available systems:', Object.keys(this.scene.systems));
             
             if (!this.mindarSystem) {
-                console.error('MindAR system not found in scene.systems');
-                console.error('Check that targets.mind file exists and path is correct:', CONFIG.TARGETS_FILE);
-                throw new Error('MindAR system not found. Check targets.mind file path.');
+                console.error('MindAR system not found after waiting');
+                console.error('Available systems:', Object.keys(this.scene.systems));
+                console.error('Check that:');
+                console.error('1. MindAR script is loaded correctly');
+                console.error('2. targets.mind file exists at:', CONFIG.TARGETS_FILE);
+                console.error('3. The mindar-image attribute is set correctly on a-scene');
+                throw new Error('MindAR system not found. Check targets.mind file path and script loading.');
             }
             console.log('✓ MindAR system found');
 
@@ -137,11 +147,27 @@ class EmojiModelAdapter {
             console.log('Step 7: Starting MindAR tracking...');
             // Start MindAR tracking (this will request camera access)
             try {
+                // Wait for arReady before starting
+                await new Promise((resolve, reject) => {
+                    const timeout = setTimeout(() => {
+                        reject(new Error('arReady event timeout'));
+                    }, 5000);
+                    
+                    this.scene.addEventListener('arReady', () => {
+                        clearTimeout(timeout);
+                        console.log('arReady event received');
+                        resolve();
+                    }, { once: true });
+                });
+                
                 await this.mindarSystem.start();
                 console.log('✓ MindAR started successfully, camera should be active');
             } catch (startError) {
                 console.error('Failed to start MindAR:', startError);
-                console.error('Error details:', startError.message, startError.stack);
+                console.error('Error details:', startError.message);
+                if (startError.stack) {
+                    console.error('Stack:', startError.stack);
+                }
                 throw new Error(`Failed to start MindAR: ${startError.message}`);
             }
 
