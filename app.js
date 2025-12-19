@@ -234,6 +234,26 @@ class EmojiModelAdapter {
             }
         }, { once: true });
         
+        // Also listen for target events on the scene (some MindAR versions fire here)
+        for (let i = 0; i < this.emojiLabels.length; i++) {
+            const label = this.emojiLabels[i] || `Target ${i}`;
+            this.scene.addEventListener(`targetFound-${i}`, () => {
+                console.log(`🎯 Scene-level event: Target ${i} (${label}) FOUND!`);
+                this.detectedTargets.set(i, {
+                    targetIndex: i,
+                    label,
+                    confidence: 1.0,
+                    found: true,
+                    timestamp: Date.now()
+                });
+            });
+            
+            this.scene.addEventListener(`targetLost-${i}`, () => {
+                console.log(`❌ Scene-level event: Target ${i} (${label}) LOST`);
+                this.detectedTargets.delete(i);
+            });
+        }
+        
         // Listen for arError event
         this.scene.addEventListener('arError', (event) => {
             console.error('❌ MindAR error:', event.detail);
