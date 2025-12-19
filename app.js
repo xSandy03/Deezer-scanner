@@ -49,22 +49,23 @@ const COMBO_PLAYLISTS = {
 };
 
 // ============================================================================
-// Model Adapter Class
+// COCO-SSD Model Adapter for Object Detection
 // ============================================================================
 
 class EmojiModelAdapter {
     constructor() {
         this.model = null;
         this.isLoaded = false;
-        this.inputSize = [224, 224]; // Default input size, adjust based on your model
         this.emojiLabels = EMOJI_LABELS; // Use labels from config
+        // COCO-SSD class names that might represent cube-like objects
+        this.cubeLikeClasses = [
+            'box', 'bottle', 'book', 'cell phone', 'remote', 'keyboard',
+            'tv', 'laptop', 'mouse', 'clock', 'vase', 'cup', 'bowl'
+        ];
     }
 
     /**
-     * Load TensorFlow.js model from local files
-     * Supports both classification and object detection models
-     * Model should be exported from Teachable Machine, TensorFlow.js, or similar tool
-     * Expected structure: /emoji-model/model.json and weight files
+     * Load COCO-SSD pre-trained model for object detection
      */
     async loadModel() {
         try {
@@ -74,17 +75,20 @@ class EmojiModelAdapter {
                 return true;
             }
 
-            // Load the model
-            this.model = await tf.loadLayersModel(CONFIG.MODEL_PATH);
+            // Check if cocoSsd is available
+            if (typeof cocoSsd === 'undefined') {
+                throw new Error('COCO-SSD model not loaded. Check script tag.');
+            }
+
+            // Load COCO-SSD model
+            console.log('Loading COCO-SSD model...');
+            this.model = await cocoSsd.load();
             this.isLoaded = true;
-            console.log('Model loaded successfully');
-            
-            // Log model structure for debugging
-            this.model.summary();
+            console.log('COCO-SSD model loaded successfully');
             
             return true;
         } catch (error) {
-            console.error('Error loading model:', error);
+            console.error('Error loading COCO-SSD model:', error);
             console.log('Continuing without model (will not detect)');
             this.isLoaded = false;
             return false;
@@ -92,28 +96,29 @@ class EmojiModelAdapter {
     }
 
     /**
-     * Preprocess image for model input
-     * @param {HTMLImageElement|ImageData|HTMLCanvasElement} image - Input image
-     * @returns {tf.Tensor} Preprocessed tensor
+     * Filter cube-like objects from COCO-SSD detections
+     * @param {Array} detections - COCO-SSD detection results
+     * @returns {Array} Filtered detections for cube-like objects
      */
-    preprocess(image) {
-        // TODO: Adjust preprocessing based on your model requirements
-        // Common preprocessing: resize, normalize, convert to tensor
-        return tf.tidy(() => {
-            let tensor = tf.browser.fromPixels(image);
-            tensor = tf.image.resizeBilinear(tensor, this.inputSize);
-            tensor = tensor.div(255.0); // Normalize to [0, 1]
-            tensor = tensor.expandDims(0); // Add batch dimension
-            return tensor;
+    filterCubeLikeObjects(detections) {
+        // Filter for cube-like objects (or accept all if none match)
+        // COCO-SSD doesn't have a "cube" class, so we accept common box-like objects
+        // Or we can accept all detections and let the classification model decide
+        return detections.filter(detection => {
+            const className = detection.class.toLowerCase();
+            // Accept if it's in our cube-like list, or accept all for now
+            return this.cubeLikeClasses.some(cubeClass => 
+                className.includes(cubeClass.toLowerCase())
+            ) || detections.length <= 2; // If few detections, accept all
         });
     }
 
     /**
-     * Predict emojis from image with bounding box support
+     * Predict cube-like objects using COCO-SSD and return bounding boxes
      * @param {HTMLImageElement|ImageData|HTMLCanvasElement} image - Input image
      * @param {number} imageWidth - Original image width
      * @param {number} imageHeight - Original image height
-     * @returns {Array<{label: string, confidence: number, bbox?: {x: number, y: number, width: number, height: number}}>} Detections with bounding boxes
+     * @returns {Array<{label: string, confidence: number, bbox: {x: number, y: number, width: number, height: number}}>} Detections with bounding boxes
      */
     async predict(image, imageWidth, imageHeight) {
         if (!this.isLoaded || CONFIG.MOCK_MODE) {
@@ -122,30 +127,40 @@ class EmojiModelAdapter {
         }
 
         try {
-            const preprocessed = this.preprocess(image);
-            const predictions = await this.model.predict(preprocessed);
-            const data = await predictions.data();
+            // Run COCO-SSD detection
+            const detections = await this.model.detect(image);
             
-            // Map predictions to emoji labels using stored labels
-            const results = Array.from(data)
-                .map((confidence, index) => ({
-                    label: this.emojiLabels[index] || `Emoji${index}`,
-                    confidence: confidence,
-                    // If your model provides bounding boxes, extract them here
-                    // For classification models: center the box in the image
-                    // For object detection models: extract bbox coordinates from model output
+            // Filter for cube-like objects
+            let filteredDetections = this.filterCubeLikeObjects(detections);
+            
+            // Sort by confidence and limit to top 2
+            filteredDetections = filteredDetections
+                .sort((a, b) => b.score - a.score)
+                .slice(0, 2); // Limit to 2 highest confidence detections
+            
+            // Map COCO-SSD detections to our format with emoji labels
+            // For now, we'll use the class name, but you can add classification later
+            const results = filteredDetections.map((detection, index) => {
+                // Convert COCO-SSD bbox format (x, y, width, height) to our format
+                const bbox = detection.bbox; // COCO-SSD bbox: [x, y, width, height]
+                
+                // Map detection to emoji label based on index or add classification logic here
+                // For now, we'll use the first emoji label as placeholder
+                // TODO: Add classification model to identify which emoji is on the cube
+                const emojiLabel = this.emojiLabels[index] || detection.class;
+                
+                return {
+                    label: emojiLabel,
+                    confidence: detection.score,
                     bbox: {
-                        x: imageWidth * 0.25, // Center horizontally
-                        y: imageHeight * 0.25, // Center vertically
-                        width: imageWidth * 0.5, // 50% of image width
-                        height: imageHeight * 0.5 // 50% of image height
-                    }
-                }))
-                .sort((a, b) => b.confidence - a.confidence)
-                .filter(p => p.confidence >= CONFIG.CONFIDENCE_THRESHOLD);
-            
-            preprocessed.dispose();
-            predictions.dispose();
+                        x: bbox[0], // x coordinate
+                        y: bbox[1], // y coordinate
+                        width: bbox[2], // width
+                        height: bbox[3] // height
+                    },
+                    className: detection.class // Store original COCO class for debugging
+                };
+            });
             
             return results;
         } catch (error) {
@@ -163,11 +178,23 @@ class EmojiModelAdapter {
     }
 
     /**
-     * Update emoji labels mapping - call this with your actual emoji names
-     * @param {Array<string>} labels - Array of emoji labels matching model output indices
+     * Update emoji labels mapping
+     * @param {Array<string>} labels - Array of emoji labels
      */
     setEmojiLabels(labels) {
         this.emojiLabels = labels;
+    }
+
+    /**
+     * Classify cropped region to determine which emoji is on the cube
+     * TODO: Add custom classification model here to identify emoji from cropped region
+     * @param {HTMLCanvasElement} croppedImage - Cropped region of detected object
+     * @returns {string} Emoji label
+     */
+    async classifyEmoji(croppedImage) {
+        // TODO: Implement custom emoji classification model
+        // For now, return default or use heuristics
+        return this.emojiLabels[0] || 'Unknown';
     }
 }
 
@@ -492,17 +519,6 @@ class AppController {
 
     async init() {
         this.setupEventListeners();
-        this.setupWindowResize();
-    }
-
-    setupWindowResize() {
-        // Update overlay canvas size when window resizes
-        window.addEventListener('resize', () => {
-            if (this.overlayCanvas) {
-                this.overlayCanvas.width = window.innerWidth;
-                this.overlayCanvas.height = window.innerHeight;
-            }
-        });
     }
 
     setupEventListeners() {
@@ -536,7 +552,7 @@ class AppController {
             console.log('Skipping camera (MOCK_MODE is true)');
         }
 
-        // Load model (optional - camera can work without it)
+        // Load COCO-SSD model
         await this.modelAdapter.loadModel();
         
         // Update emoji labels from config
@@ -680,11 +696,6 @@ class AppController {
         const scaleY = displayHeight / this.video.videoHeight;
 
         // Draw each detection
-        if (detections.length === 0) {
-            // No detections - clear overlay
-            return;
-        }
-
         detections.forEach((detection, index) => {
             if (!detection.bbox) return;
 
@@ -701,13 +712,11 @@ class AppController {
             this.overlayCtx.lineWidth = 3;
             this.overlayCtx.strokeRect(x, y, width, height);
 
-            // Draw corner markers at the four edges/corners of the cube
-            this.drawCornerMarkers(x, y, width, height);
-
             // Draw label background
             const labelText = `${detection.label}`;
             const confidenceText = `${Math.round(detection.confidence * 100)}%`;
-            const fullText = `${labelText} ${confidenceText}`;
+            const className = detection.className ? ` (${detection.className})` : '';
+            const fullText = `${labelText} ${confidenceText}${className}`;
             
             this.overlayCtx.font = 'bold 24px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
             const textMetrics = this.overlayCtx.measureText(fullText);
@@ -729,76 +738,6 @@ class AppController {
             this.overlayCtx.fillStyle = '#FFFFFF';
             this.overlayCtx.fillText(fullText, x, labelY + 20);
         });
-    }
-
-    /**
-     * Draw corner markers at the four corners of the bounding box
-     * Creates L-shaped corner indicators with a circle at each corner
-     * @param {number} x - Top-left x coordinate
-     * @param {number} y - Top-left y coordinate
-     * @param {number} width - Box width
-     * @param {number} height - Box height
-     */
-    drawCornerMarkers(x, y, width, height) {
-        if (!this.overlayCtx) return;
-        
-        const cornerLength = 40; // Length of corner lines (L-shape) - increased for visibility
-        const markerRadius = 8; // Radius of corner circle - increased for visibility
-        const lineWidth = 5; // Line width - increased for visibility
-        
-        this.overlayCtx.strokeStyle = '#A238FF'; // Purple color
-        this.overlayCtx.fillStyle = '#A238FF';
-        this.overlayCtx.lineWidth = lineWidth;
-        this.overlayCtx.lineCap = 'round'; // Rounded line ends
-        this.overlayCtx.lineJoin = 'round';
-        
-        // Top-left corner
-        this.overlayCtx.beginPath();
-        this.overlayCtx.moveTo(x, y); // Start at corner
-        this.overlayCtx.lineTo(x + cornerLength, y); // Horizontal line
-        this.overlayCtx.moveTo(x, y); // Back to corner
-        this.overlayCtx.lineTo(x, y + cornerLength); // Vertical line
-        this.overlayCtx.stroke();
-        // Draw filled circle at corner
-        this.overlayCtx.beginPath();
-        this.overlayCtx.arc(x, y, markerRadius, 0, Math.PI * 2);
-        this.overlayCtx.fill();
-        
-        // Top-right corner
-        this.overlayCtx.beginPath();
-        this.overlayCtx.moveTo(x + width, y); // Start at corner
-        this.overlayCtx.lineTo(x + width - cornerLength, y); // Horizontal line
-        this.overlayCtx.moveTo(x + width, y); // Back to corner
-        this.overlayCtx.lineTo(x + width, y + cornerLength); // Vertical line
-        this.overlayCtx.stroke();
-        // Draw filled circle at corner
-        this.overlayCtx.beginPath();
-        this.overlayCtx.arc(x + width, y, markerRadius, 0, Math.PI * 2);
-        this.overlayCtx.fill();
-        
-        // Bottom-left corner
-        this.overlayCtx.beginPath();
-        this.overlayCtx.moveTo(x, y + height); // Start at corner
-        this.overlayCtx.lineTo(x + cornerLength, y + height); // Horizontal line
-        this.overlayCtx.moveTo(x, y + height); // Back to corner
-        this.overlayCtx.lineTo(x, y + height - cornerLength); // Vertical line
-        this.overlayCtx.stroke();
-        // Draw filled circle at corner
-        this.overlayCtx.beginPath();
-        this.overlayCtx.arc(x, y + height, markerRadius, 0, Math.PI * 2);
-        this.overlayCtx.fill();
-        
-        // Bottom-right corner
-        this.overlayCtx.beginPath();
-        this.overlayCtx.moveTo(x + width, y + height); // Start at corner
-        this.overlayCtx.lineTo(x + width - cornerLength, y + height); // Horizontal line
-        this.overlayCtx.moveTo(x + width, y + height); // Back to corner
-        this.overlayCtx.lineTo(x + width, y + height - cornerLength); // Vertical line
-        this.overlayCtx.stroke();
-        // Draw filled circle at corner
-        this.overlayCtx.beginPath();
-        this.overlayCtx.arc(x + width, y + height, markerRadius, 0, Math.PI * 2);
-        this.overlayCtx.fill();
     }
 
 }
