@@ -1019,9 +1019,18 @@ class AppController {
         const x = this.overlayCanvas.width / 2;
         const y = this.overlayCanvas.height - margin;
         
-        // Draw status text in purple (#A238FF) - no background box
+        // Draw status text in purple (#A238FF) with shadow for visibility
         this.overlayCtx.fillStyle = '#A238FF';
+        // Add white shadow/outline for better visibility against camera background
+        this.overlayCtx.shadowColor = 'rgba(255, 255, 255, 0.8)';
+        this.overlayCtx.shadowBlur = 8;
+        this.overlayCtx.shadowOffsetX = 0;
+        this.overlayCtx.shadowOffsetY = 0;
         this.overlayCtx.fillText(statusText, x, y);
+        
+        // Reset shadow
+        this.overlayCtx.shadowColor = 'transparent';
+        this.overlayCtx.shadowBlur = 0;
     }
 
     /**

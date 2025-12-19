@@ -246,11 +246,12 @@ body video,
     width: 100vw !important;
     height: 100vh !important;
     pointer-events: none !important;
-    z-index: 1000 !important;
+    z-index: 9999 !important;
     display: block !important;
     visibility: visible !important;
     opacity: 1 !important;
     background: transparent !important;
+    transform: translateZ(0) !important; /* Force hardware acceleration */
 }
 
 /* Mobile Optimizations */
