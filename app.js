@@ -972,11 +972,8 @@ class AppController {
                     confidence: d.confidence
                 }));
                 
-                // Draw labels on overlay
-                this.drawMindARDetections(detections);
-                
-                // Draw status indicator
-                this.drawDetectionStatus(detections.length);
+                // Draw labels on overlay (status will be drawn inside to preserve both)
+                this.drawMindARDetections(detections, detections.length);
                 
                 // Update state with smoothing
                 const stateChanged = this.detectionState.update(predictions);
@@ -1047,23 +1044,24 @@ class AppController {
     /**
      * Draw labels for MindAR detected targets
      * @param {Array<{label: string, confidence: number, targetIndex: number}>} detections
+     * @param {number} detectionCount - Number of detections (for status)
      */
-    drawMindARDetections(detections) {
+    drawMindARDetections(detections, detectionCount = 0) {
         if (!this.overlayCanvas || !this.overlayCtx) {
             console.warn('Cannot draw detections: missing overlay canvas');
             return;
         }
 
+        // Always clear canvas first
+        this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
+
         if (!detections || detections.length === 0) {
-            // Clear overlay if no detections
-            this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
+            // Draw status only if no detections
+            this.drawDetectionStatus(0);
             return;
         }
         
         console.log('Drawing detections:', detections.map(d => `${d.label} (${d.targetIndex})`));
-
-        // Clear previous drawings
-        this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
 
         // Draw labels for each detection
         // Position labels at top of screen, staggered for multiple detections
@@ -1072,8 +1070,8 @@ class AppController {
             const confidenceText = `${Math.round(detection.confidence * 100)}%`;
             const fullText = `${labelText} ${confidenceText}`;
             
-            // Use larger, bolder font for better visibility
-            this.overlayCtx.font = 'bold 48px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+            // Use larger, bolder font for better visibility with Deezer font
+            this.overlayCtx.font = 'bold 48px "Deezer Product", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
             const textMetrics = this.overlayCtx.measureText(fullText);
             const textWidth = textMetrics.width;
             const textHeight = 50;
@@ -1119,6 +1117,9 @@ class AppController {
             this.overlayCtx.shadowOffsetX = 0;
             this.overlayCtx.shadowOffsetY = 0;
         });
+        
+        // Draw status indicator after labels (so it appears at bottom)
+        this.drawDetectionStatus(detectionCount || detections.length);
     }
 
 }
