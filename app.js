@@ -9,7 +9,7 @@ const CONFIG = {
     DETECTION_FPS: 10, // Frames per second for detection (throttled)
     LOW_POWER_FPS: 5, // FPS when low power mode is enabled
     MODEL_PATH: './emoji-model/model.json', // Path to TensorFlow.js model
-    MOCK_MODE: true, // Set to false when model is ready
+    MOCK_MODE: false, // Set to true for testing without camera
 };
 
 // Playlist mapping: emoji combinations -> tracks
@@ -399,36 +399,15 @@ class MusicPlayer {
      * Update UI elements
      */
     updateTrackInfo(title, artist) {
-        const titleEl = document.getElementById('trackTitle');
-        const artistEl = document.getElementById('trackArtist');
-        if (titleEl) titleEl.textContent = title;
-        if (artistEl) artistEl.textContent = artist;
+        // UI removed - track info no longer displayed
     }
 
     updatePlayButton() {
-        const btn = document.getElementById('playPauseButton');
-        if (btn) {
-            btn.textContent = this.isPlaying ? '⏸' : '▶';
-        }
+        // UI removed - play button no longer displayed
     }
 
     updateProgress() {
-        const progressBar = document.getElementById('progressBar');
-        const currentTimeEl = document.getElementById('currentTime');
-        const durationEl = document.getElementById('duration');
-
-        if (this.audio.duration) {
-            const progress = (this.audio.currentTime / this.audio.duration) * 100;
-            if (progressBar) progressBar.value = progress;
-        }
-
-        if (currentTimeEl) {
-            currentTimeEl.textContent = this.formatTime(this.audio.currentTime);
-        }
-
-        if (durationEl) {
-            durationEl.textContent = this.formatTime(this.audio.duration || 0);
-        }
+        // UI removed - progress bar no longer displayed
     }
 
     formatTime(seconds) {
@@ -462,81 +441,33 @@ class AppController {
 
     async init() {
         this.setupEventListeners();
-        
-        // Show mock controls if in mock mode
-        if (CONFIG.MOCK_MODE) {
-            document.getElementById('mockControls').classList.remove('hidden');
-        }
     }
 
     setupEventListeners() {
         // Start button
-        document.getElementById('startButton').addEventListener('click', () => {
-            this.startApp();
-        });
-
-        // Mock mode controls
-        if (CONFIG.MOCK_MODE) {
-            document.getElementById('mockEmojiA').addEventListener('change', (e) => {
-                this.handleMockEmojiChange('A', e.target.value);
-            });
-            document.getElementById('mockEmojiB').addEventListener('change', (e) => {
-                this.handleMockEmojiChange('B', e.target.value);
+        const startButton = document.getElementById('startButton');
+        if (startButton) {
+            startButton.addEventListener('click', () => {
+                this.startApp();
             });
         }
-
-        // Music player controls
-        document.getElementById('playPauseButton').addEventListener('click', () => {
-            this.musicPlayer.togglePlayPause();
-        });
-
-        document.getElementById('nextButton').addEventListener('click', () => {
-            this.musicPlayer.next();
-        });
-
-        document.getElementById('prevButton').addEventListener('click', () => {
-            this.musicPlayer.prev();
-        });
-
-        document.getElementById('volumeSlider').addEventListener('input', (e) => {
-            const volume = e.target.value / 100;
-            this.musicPlayer.setVolume(volume);
-        });
-
-        document.getElementById('progressBar').addEventListener('input', (e) => {
-            if (this.musicPlayer.audio.duration) {
-                const time = (e.target.value / 100) * this.musicPlayer.audio.duration;
-                this.musicPlayer.audio.currentTime = time;
-            }
-        });
-
-        // Low power toggle
-        document.getElementById('lowPowerToggle').addEventListener('change', (e) => {
-            this.detectionInterval = 1000 / (e.target.checked ? CONFIG.LOW_POWER_FPS : CONFIG.DETECTION_FPS);
-        });
     }
 
     async startApp() {
         // Hide start overlay
-        document.getElementById('startOverlay').classList.add('hidden');
-        document.getElementById('app').classList.remove('hidden');
+        const startOverlay = document.getElementById('startOverlay');
+        const app = document.getElementById('app');
+        if (startOverlay) startOverlay.classList.add('hidden');
+        if (app) app.classList.remove('hidden');
 
-        // Update status
-        this.updateStatus('Loading Model...');
-
-        // Load model
-        const modelLoaded = await this.modelAdapter.loadModel();
-        if (!modelLoaded && !CONFIG.MOCK_MODE) {
-            this.updateStatus('Model failed to load');
-            return;
-        }
-
-        // Start camera (if not in mock mode)
+        // Start camera first (camera works independently of model)
+        // Only request camera access after user explicitly clicks "Tap to Start"
         if (!CONFIG.MOCK_MODE) {
             await this.startCamera();
-        } else {
-            this.updateStatus('Mock Mode Active');
         }
+
+        // Load model (optional - camera can work without it)
+        await this.modelAdapter.loadModel();
 
         // Start detection loop
         this.startDetection();
@@ -553,19 +484,20 @@ class AppController {
             });
 
             this.video.srcObject = stream;
-            this.updateStatus('Camera Ready');
             
-            // Set canvas size to match video
+            // Set canvas size to match video and play video
             this.video.addEventListener('loadedmetadata', () => {
                 this.canvas.width = this.video.videoWidth;
                 this.canvas.height = this.video.videoHeight;
+                // Only start playing video after stream is connected
+                this.video.play().catch(err => {
+                    console.error('Video play error:', err);
+                });
             });
         } catch (error) {
             console.error('Camera error:', error);
-            this.updateStatus('Camera Error');
             // Fall back to mock mode
             CONFIG.MOCK_MODE = true;
-            document.getElementById('mockControls').classList.remove('hidden');
         }
     }
 
@@ -583,19 +515,8 @@ class AppController {
         if (shouldDetect) {
             this.lastDetectionTime = now;
 
-            if (CONFIG.MOCK_MODE) {
-                // Mock mode: use dropdown values
-                const mockA = document.getElementById('mockEmojiA').value || null;
-                const mockB = document.getElementById('mockEmojiB').value || null;
-                this.updateEmojiDisplay(mockA, mockB);
-                
-                // Update combo if changed
-                const comboKey = this.getComboKeyFromEmojis(mockA, mockB);
-                this.musicPlayer.switchPlaylist(comboKey);
-            } else {
+            if (!CONFIG.MOCK_MODE) {
                 // Real detection
-                this.updateStatus('Scanning...');
-                
                 // Capture frame
                 this.ctx.drawImage(this.video, 0, 0, this.canvas.width, this.canvas.height);
                 
@@ -606,20 +527,9 @@ class AppController {
                 const stateChanged = this.detectionState.update(predictions);
                 
                 if (stateChanged) {
-                    this.updateEmojiDisplay(
-                        this.detectionState.emojiA,
-                        this.detectionState.emojiB
-                    );
-                    
                     // Switch playlist if combo changed
                     const comboKey = this.detectionState.getComboKey();
                     this.musicPlayer.switchPlaylist(comboKey);
-                    
-                    if (this.detectionState.emojiA && this.detectionState.emojiB) {
-                        this.updateStatus('Two Emojis Detected');
-                    } else if (this.detectionState.emojiA || this.detectionState.emojiB) {
-                        this.updateStatus('One Emoji Detected');
-                    }
                 }
             }
         }
@@ -627,56 +537,6 @@ class AppController {
         requestAnimationFrame(() => this.detectionLoop());
     }
 
-    handleMockEmojiChange(side, emoji) {
-        const emojiA = side === 'A' ? emoji : document.getElementById('mockEmojiA').value || null;
-        const emojiB = side === 'B' ? emoji : document.getElementById('mockEmojiB').value || null;
-        
-        this.updateEmojiDisplay(emojiA, emojiB);
-        
-        const comboKey = this.getComboKeyFromEmojis(emojiA, emojiB);
-        this.musicPlayer.switchPlaylist(comboKey);
-    }
-
-    getComboKeyFromEmojis(emojiA, emojiB) {
-        const emojis = [emojiA, emojiB].filter(e => e && e !== '');
-        if (emojis.length === 0) return 'DEFAULT';
-        if (emojis.length === 1) return `${emojis[0]}|—`;
-        const sorted = emojis.sort();
-        return sorted.join('|');
-    }
-
-    updateEmojiDisplay(emojiA, emojiB) {
-        const emojiAEl = document.getElementById('emojiA');
-        const emojiBEl = document.getElementById('emojiB');
-        const labelAEl = document.getElementById('emojiALabel');
-        const labelBEl = document.getElementById('emojiBLabel');
-
-        emojiAEl.textContent = emojiA || '—';
-        emojiBEl.textContent = emojiB || '—';
-        
-        // Update labels (you can customize these)
-        labelAEl.textContent = emojiA ? `(${this.getEmojiName(emojiA)})` : '';
-        labelBEl.textContent = emojiB ? `(${this.getEmojiName(emojiB)})` : '';
-    }
-
-    getEmojiName(emoji) {
-        const names = {
-            '😄': 'Happy',
-            '😈': 'Devil',
-            '🎵': 'Music',
-            '🔥': 'Fire',
-            '❤️': 'Heart',
-            '⭐': 'Star'
-        };
-        return names[emoji] || 'Unknown';
-    }
-
-    updateStatus(text) {
-        const statusEl = document.getElementById('statusText');
-        if (statusEl) {
-            statusEl.textContent = text;
-        }
-    }
 }
 
 // ============================================================================
