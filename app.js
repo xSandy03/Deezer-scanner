@@ -100,14 +100,20 @@ class EmojiModelAdapter {
             
             console.log('Step 4: Waiting for scene to load...');
             // Wait for scene to be ready
-            await new Promise(resolve => {
+            await new Promise((resolve, reject) => {
+                const timeout = setTimeout(() => {
+                    reject(new Error('Scene loaded timeout after 5 seconds'));
+                }, 5000);
+                
                 if (this.scene.hasLoaded) {
                     console.log('Scene already loaded');
+                    clearTimeout(timeout);
                     resolve();
                 } else {
                     console.log('Waiting for scene loaded event...');
                     this.scene.addEventListener('loaded', () => {
                         console.log('Scene loaded event fired');
+                        clearTimeout(timeout);
                         resolve();
                     }, { once: true });
                 }
