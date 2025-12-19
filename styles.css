@@ -221,51 +221,10 @@ body video,
     opacity: 1;
 }
 
-/* Status Indicator */
-.status-indicator {
-    position: fixed;
-    top: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    background-color: rgba(0, 0, 0, 0.7);
-    color: var(--white);
-    padding: 10px 20px;
-    border-radius: 20px;
-    z-index: 200;
-    font-size: 14px;
-    font-weight: 500;
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    transition: opacity 0.3s ease;
-    pointer-events: none;
-}
-
-.status-text {
-    text-align: center;
-}
-
-.status-indicator.status-ready {
-    background-color: rgba(76, 175, 80, 0.8);
-}
-
-.status-indicator.status-detecting {
-    background-color: rgba(162, 56, 255, 0.8);
-}
-
-.status-indicator.status-error {
-    background-color: rgba(244, 67, 54, 0.8);
-}
-
 /* Mobile Optimizations */
 @media (max-width: 768px) {
     .overlay-content h1 {
         font-size: 1.5rem;
-    }
-    
-    .status-indicator {
-        top: 10px;
-        font-size: 12px;
-        padding: 8px 16px;
     }
 }
 

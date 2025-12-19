@@ -857,8 +857,6 @@ class AppController {
         this.musicPlayer = new MusicPlayer();
         
         this.overlayCanvas = document.getElementById('overlayCanvas');
-        this.statusIndicator = document.getElementById('statusIndicator');
-        this.statusText = document.getElementById('statusText');
         this.scene = null;
         
         if (!this.overlayCanvas) {
@@ -868,27 +866,8 @@ class AppController {
         
         this.overlayCtx = this.overlayCanvas.getContext('2d');
         this.isDetecting = false;
-        this.lastDetectionCount = 0;
         
         this.init();
-    }
-    
-    /**
-     * Update status indicator
-     */
-    updateStatus(message, status = 'default') {
-        if (this.statusText) {
-            this.statusText.textContent = message;
-        }
-        if (this.statusIndicator) {
-            // Remove all status classes
-            this.statusIndicator.classList.remove('status-ready', 'status-detecting', 'status-error');
-            // Add new status class if not default
-            if (status !== 'default') {
-                this.statusIndicator.classList.add(`status-${status}`);
-            }
-        }
-        console.log('Status:', message, status);
     }
 
     async init() {
@@ -928,22 +907,17 @@ class AppController {
 
         if (!CONFIG.MOCK_MODE) {
             // Step 2: Now initialize MindAR (scene is visible, so camera can be requested)
-            this.updateStatus('Loading AR system...', 'default');
             console.log('Loading MindAR tracking (scene is visible)...');
             const loaded = await this.modelAdapter.loadModel();
             if (loaded) {
                 console.log('MindAR model loaded successfully');
-                this.updateStatus('AR Ready - Point camera at targets', 'ready');
                 // Update emoji labels from config
                 this.modelAdapter.setEmojiLabels(EMOJI_LABELS);
             } else {
                 console.error('Failed to load MindAR model');
-                this.updateStatus('Failed to load AR - Check console', 'error');
                 // Don't block - continue anyway
                 console.log('Continuing without AR tracking');
             }
-        } else {
-            this.updateStatus('Mock Mode Active', 'default');
         }
 
         // Start detection loop
@@ -984,17 +958,6 @@ class AppController {
             // Get current detections from MindAR
             const detections = this.modelAdapter.getDetections();
             
-            // Update status based on detection count
-            if (detections.length !== this.lastDetectionCount) {
-                if (detections.length > 0) {
-                    const labels = detections.map(d => d.label).join(', ');
-                    this.updateStatus(`Detecting: ${labels} (${detections.length} target${detections.length > 1 ? 's' : ''})`, 'detecting');
-                } else {
-                    this.updateStatus('AR Ready - Point camera at targets', 'ready');
-                }
-                this.lastDetectionCount = detections.length;
-            }
-            
             if (detections.length > 0) {
                 // Log detections periodically (not every frame)
                 if (this.frameCount === undefined) this.frameCount = 0;
@@ -1012,6 +975,9 @@ class AppController {
                 // Draw labels on overlay
                 this.drawMindARDetections(detections);
                 
+                // Draw status indicator
+                this.drawDetectionStatus(detections.length);
+                
                 // Update state with smoothing
                 const stateChanged = this.detectionState.update(predictions);
                 
@@ -1022,12 +988,60 @@ class AppController {
                     this.musicPlayer.switchPlaylist(comboKey);
                 }
             } else {
-                // Clear overlay if no detections
+                // Clear overlay if no detections (but keep status)
                 this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
+                // Draw status showing no detections
+                this.drawDetectionStatus(0);
             }
         }
 
         requestAnimationFrame(() => this.detectionLoop());
+    }
+
+    /**
+     * Draw detection status indicator
+     * @param {number} detectionCount - Number of currently detected targets
+     */
+    drawDetectionStatus(detectionCount) {
+        if (!this.overlayCanvas || !this.overlayCtx) {
+            return;
+        }
+
+        const statusText = detectionCount > 0 
+            ? `${detectionCount} target${detectionCount > 1 ? 's' : ''} detected`
+            : 'No targets detected';
+        
+        const statusColor = detectionCount > 0 ? '#4CAF50' : '#FF5722'; // Green if detected, Red if not
+        const bgColor = detectionCount > 0 ? 'rgba(76, 175, 80, 0.9)' : 'rgba(255, 87, 34, 0.9)';
+        
+        // Draw status at bottom center of screen
+        this.overlayCtx.font = 'bold 20px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+        const textMetrics = this.overlayCtx.measureText(statusText);
+        const textWidth = textMetrics.width;
+        const textHeight = 24;
+        const padding = 12;
+        const margin = 20;
+        
+        const x = (this.overlayCanvas.width - textWidth) / 2;
+        const y = this.overlayCanvas.height - margin - textHeight;
+        
+        // Draw background rectangle
+        const rectX = x - padding;
+        const rectY = y - textHeight - padding;
+        const rectWidth = textWidth + (padding * 2);
+        const rectHeight = textHeight + (padding * 2);
+        
+        this.overlayCtx.fillStyle = bgColor;
+        if (typeof this.overlayCtx.roundRect === 'function') {
+            this.overlayCtx.roundRect(rectX, rectY, rectWidth, rectHeight, 8);
+            this.overlayCtx.fill();
+        } else {
+            this.overlayCtx.fillRect(rectX, rectY, rectWidth, rectHeight);
+        }
+        
+        // Draw status text
+        this.overlayCtx.fillStyle = '#FFFFFF';
+        this.overlayCtx.fillText(statusText, x, y);
     }
 
     /**
