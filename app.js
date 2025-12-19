@@ -130,22 +130,26 @@ class EmojiModelAdapter {
 
             console.log('Step 5: Getting MindAR system...');
             
-            // Check if mindar-image component is registered
-            if (!AFRAME.components['mindar-image-system']) {
-                console.error('mindar-image-system component not registered in AFRAME.components');
-                console.log('Available A-Frame components:', Object.keys(AFRAME.components).filter(k => k.includes('mindar')));
+            // Check if mindar-image component is registered (it's a component, not a system)
+            const mindarComponents = Object.keys(AFRAME.components).filter(k => k.includes('mindar'));
+            console.log('Available MindAR components:', mindarComponents);
+            
+            if (!mindarComponents.includes('mindar-image')) {
+                console.error('mindar-image component not registered in AFRAME.components');
                 throw new Error('MindAR component not registered. Check script loading order.');
             }
             console.log('✓ MindAR component is registered');
             
-            // Wait longer for systems to register (MindAR can take a moment)
+            // Get the system - MindAR uses 'mindar-image' as the system name
+            // Access it through the component's system property or directly from scene
             let attempts = 0;
             while (!this.mindarSystem && attempts < 30) {
                 await new Promise(resolve => setTimeout(resolve, 100));
-                // Try different system names
-                this.mindarSystem = this.scene.systems['mindar-image-system'] || 
-                                    this.scene.systems['mindar-image'] ||
-                                    this.scene.systems['mindar'];
+                
+                // Try to get the system from the scene
+                // The system name is 'mindar-image', same as the component
+                this.mindarSystem = this.scene.systems['mindar-image'];
+                
                 attempts++;
                 if (!this.mindarSystem && attempts % 5 === 0) {
                     console.log(`Waiting for MindAR system... attempt ${attempts}/30`);
@@ -156,14 +160,23 @@ class EmojiModelAdapter {
             console.log('Available systems:', Object.keys(this.scene.systems));
             
             if (!this.mindarSystem) {
+                // Try accessing through the component instead
+                const mindarComponent = this.scene.components['mindar-image'];
+                if (mindarComponent && mindarComponent.system) {
+                    console.log('Found MindAR system through component');
+                    this.mindarSystem = mindarComponent.system;
+                }
+            }
+            
+            if (!this.mindarSystem) {
                 console.error('MindAR system not found after waiting 3 seconds');
                 console.error('Available systems:', Object.keys(this.scene.systems));
+                console.error('Scene components:', Object.keys(this.scene.components || {}));
                 console.error('Check that:');
                 console.error('1. MindAR scripts are loaded in correct order');
                 console.error('2. targets.mind file exists at:', CONFIG.TARGETS_FILE);
                 console.error('3. The mindar-image attribute is set correctly on a-scene');
-                console.error('4. Scene is visible (not in hidden container)');
-                throw new Error('MindAR system not found. Check console for details.');
+                throw new Error('MindAR system not found. The scene may need the mindar-image component attribute.');
             }
             console.log('✓ MindAR system found');
 
