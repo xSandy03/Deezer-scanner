@@ -108,6 +108,10 @@ class EmojiModelAdapter {
             // Set up event listeners for target detection
             this.setupMindAREvents();
 
+            // Start MindAR tracking (this will request camera access)
+            await this.mindarSystem.start();
+            console.log('MindAR started, camera should be active');
+
             this.isLoaded = true;
             console.log('MindAR loaded successfully');
             
@@ -505,7 +509,7 @@ class AppController {
     async startApp() {
         console.log('startApp called, MOCK_MODE:', CONFIG.MOCK_MODE);
         
-        // Hide start overlay
+        // Hide start overlay and show app
         const startOverlay = document.getElementById('startOverlay');
         const app = document.getElementById('app');
         if (startOverlay) startOverlay.classList.add('hidden');
@@ -520,9 +524,16 @@ class AppController {
 
         // Load MindAR model (handles camera internally)
         if (!CONFIG.MOCK_MODE) {
-            await this.modelAdapter.loadModel();
-            // Update emoji labels from config
-            this.modelAdapter.setEmojiLabels(EMOJI_LABELS);
+            console.log('Loading MindAR...');
+            const loaded = await this.modelAdapter.loadModel();
+            if (loaded) {
+                console.log('MindAR model loaded successfully');
+                // Update emoji labels from config
+                this.modelAdapter.setEmojiLabels(EMOJI_LABELS);
+            } else {
+                console.error('Failed to load MindAR model');
+                alert('Failed to load AR tracking. Please check console for errors.');
+            }
         }
 
         // Start detection loop
