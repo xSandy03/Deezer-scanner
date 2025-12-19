@@ -147,8 +147,8 @@ class EmojiModelAdapter {
             while (!this.mindarSystem && attempts < 50) {
                 await new Promise(resolve => setTimeout(resolve, 100));
                 
-                // Try to get the system from the scene
-                this.mindarSystem = this.scene.systems['mindar-image'];
+                // Try to get the system from the scene - system name is 'mindar-image-system'
+                this.mindarSystem = this.scene.systems['mindar-image-system'] || this.scene.systems['mindar-image'];
                 
                 attempts++;
                 if (!this.mindarSystem && attempts % 10 === 0) {
