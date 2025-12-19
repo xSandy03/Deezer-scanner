@@ -923,20 +923,11 @@ class AppController {
         // Start detection loop
         this.startDetection();
         
-        // Test overlay canvas is working - draw a test indicator
+        // Draw status immediately
         setTimeout(() => {
-            this.overlayCtx.fillStyle = 'rgba(255, 0, 0, 0.5)';
-            this.overlayCtx.fillRect(10, 10, 100, 30);
-            this.overlayCtx.fillStyle = '#FFFFFF';
-            this.overlayCtx.font = '16px Arial';
-            this.overlayCtx.fillText('AR Ready', 15, 30);
-            console.log('Test indicator drawn on overlay canvas');
-            
-            // Clear test after 2 seconds
-            setTimeout(() => {
-                this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
-            }, 2000);
-        }, 1000);
+            console.log('Drawing initial status, canvas:', this.overlayCanvas, 'ctx:', this.overlayCtx);
+            this.drawDetectionStatus(0);
+        }, 500);
     }
 
 
@@ -1000,18 +991,34 @@ class AppController {
      * @param {number} detectionCount - Number of currently detected targets
      */
     drawDetectionStatus(detectionCount) {
-        if (!this.overlayCanvas || !this.overlayCtx) {
-            console.warn('Cannot draw status: missing canvas or context');
+        if (!this.overlayCanvas) {
+            console.warn('Cannot draw status: missing overlayCanvas element');
             return;
         }
+        
+        if (!this.overlayCtx) {
+            console.warn('Cannot draw status: missing overlayCtx, reinitializing...');
+            this.overlayCtx = this.overlayCanvas.getContext('2d');
+            if (!this.overlayCtx) {
+                console.error('Failed to get canvas context');
+                return;
+            }
+        }
 
-        console.log('Drawing status, canvas size:', this.overlayCanvas.width, this.overlayCanvas.height);
+        // Ensure canvas is sized correctly
+        if (this.overlayCanvas.width !== window.innerWidth || this.overlayCanvas.height !== window.innerHeight) {
+            this.overlayCanvas.width = window.innerWidth;
+            this.overlayCanvas.height = window.innerHeight;
+            console.log('Canvas resized to:', this.overlayCanvas.width, this.overlayCanvas.height);
+        }
+
+        console.log('Drawing status, canvas size:', this.overlayCanvas.width, 'x', this.overlayCanvas.height);
 
         // Always show "Move camera towards Mood Cubes" message
         const statusText = 'Move camera towards Mood Cubes';
         
         // Use Deezer purple color #A238FF
-        const bgColor = 'rgba(162, 56, 255, 0.95)'; // #A238FF with high opacity
+        const bgColor = '#A238FF'; // Solid purple
         
         // Set font - use system font as fallback if Deezer font doesn't load
         this.overlayCtx.font = 'bold 28px "Deezer Product", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif';
@@ -1026,7 +1033,7 @@ class AppController {
         
         // Center horizontally, position at bottom
         const x = this.overlayCanvas.width / 2;
-        const y = this.overlayCanvas.height - margin - (textHeight / 2);
+        const y = this.overlayCanvas.height - margin;
         
         // Draw background rectangle
         const rectX = x - (textWidth / 2) - padding;
@@ -1042,7 +1049,8 @@ class AppController {
         this.overlayCtx.fillStyle = '#FFFFFF';
         this.overlayCtx.fillText(statusText, x, y);
         
-        console.log('Status drawn at:', x, y, 'text:', statusText);
+        console.log('Status drawn - bg at:', rectX, rectY, 'text at:', x, y, 'text:', statusText);
+        console.log('Background color:', bgColor, 'Text color: white');
     }
 
     /**
