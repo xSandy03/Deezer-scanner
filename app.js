@@ -70,11 +70,15 @@ class EmojiModelAdapter {
                 return true;
             }
 
+            console.log('Step 1: Checking A-Frame...');
             // Wait for A-Frame to be ready
             if (typeof AFRAME === 'undefined') {
+                console.error('A-Frame is not defined! Check script loading order.');
                 throw new Error('A-Frame not loaded. Make sure script tag is present.');
             }
+            console.log('✓ A-Frame is available');
 
+            console.log('Step 2: Waiting for document ready...');
             await new Promise(resolve => {
                 if (document.readyState === 'complete') {
                     resolve();
@@ -82,42 +86,72 @@ class EmojiModelAdapter {
                     window.addEventListener('load', resolve);
                 }
             });
+            console.log('✓ Document is ready');
 
+            console.log('Step 3: Finding AR scene element...');
             const sceneEl = document.getElementById('arScene');
             if (!sceneEl) {
+                console.error('AR scene element not found in DOM!');
                 throw new Error('AR scene element not found');
             }
+            console.log('✓ AR scene element found');
 
             this.scene = sceneEl;
             
+            console.log('Step 4: Waiting for scene to load...');
             // Wait for scene to be ready
             await new Promise(resolve => {
                 if (this.scene.hasLoaded) {
+                    console.log('Scene already loaded');
                     resolve();
                 } else {
-                    this.scene.addEventListener('loaded', resolve);
+                    console.log('Waiting for scene loaded event...');
+                    this.scene.addEventListener('loaded', () => {
+                        console.log('Scene loaded event fired');
+                        resolve();
+                    }, { once: true });
                 }
             });
+            console.log('✓ Scene is loaded');
 
+            console.log('Step 5: Getting MindAR system...');
+            // Wait a bit for systems to register
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
             // Get MindAR system
             this.mindarSystem = this.scene.systems['mindar-image-system'];
+            console.log('Available systems:', Object.keys(this.scene.systems));
+            
             if (!this.mindarSystem) {
+                console.error('MindAR system not found in scene.systems');
+                console.error('Check that targets.mind file exists and path is correct:', CONFIG.TARGETS_FILE);
                 throw new Error('MindAR system not found. Check targets.mind file path.');
             }
+            console.log('✓ MindAR system found');
 
+            console.log('Step 6: Setting up event listeners...');
             // Set up event listeners for target detection
             this.setupMindAREvents();
+            console.log('✓ Event listeners set up');
 
+            console.log('Step 7: Starting MindAR tracking...');
             // Start MindAR tracking (this will request camera access)
-            await this.mindarSystem.start();
-            console.log('MindAR started, camera should be active');
+            try {
+                await this.mindarSystem.start();
+                console.log('✓ MindAR started successfully, camera should be active');
+            } catch (startError) {
+                console.error('Failed to start MindAR:', startError);
+                console.error('Error details:', startError.message, startError.stack);
+                throw new Error(`Failed to start MindAR: ${startError.message}`);
+            }
 
             this.isLoaded = true;
-            console.log('MindAR loaded successfully');
+            console.log('✓ MindAR loaded and started successfully');
             
             return true;
         } catch (error) {
-            console.error('Error loading MindAR:', error);
+            console.error('❌ Error loading MindAR:', error);
+            console.error('Error stack:', error.stack);
             this.isLoaded = false;
             return false;
         }
@@ -127,38 +161,56 @@ class EmojiModelAdapter {
      * Set up MindAR event listeners for target tracking
      */
     setupMindAREvents() {
-        // MindAR fires events on individual target entities
-        // We need to listen to all target entities in the scene
+        console.log('Setting up MindAR event listeners...');
+        
+        // Listen for arReady event
         this.scene.addEventListener('arReady', () => {
-            console.log('MindAR ready, setting up target listeners');
-            
-            // Create target entities for each emoji (0-5 for 6 emojis)
-            for (let i = 0; i < this.emojiLabels.length; i++) {
-                const targetEl = document.createElement('a-mindar-image-target');
-                targetEl.setAttribute('targetIndex', i);
-                targetEl.id = `target-${i}`;
-                
-                // Listen for target found/lost events on each target entity
-                targetEl.addEventListener('targetFound', () => {
-                    const label = this.emojiLabels[i] || `Target ${i}`;
-                    console.log('Target found:', i, label);
-                    
-                    this.detectedTargets.set(i, {
-                        targetIndex: i,
-                        label,
-                        confidence: 1.0,
-                        found: true
-                    });
-                });
-                
-                targetEl.addEventListener('targetLost', () => {
-                    console.log('Target lost:', i);
-                    this.detectedTargets.delete(i);
-                });
-                
-                this.scene.appendChild(targetEl);
-            }
+            console.log('✓ MindAR ready event fired, setting up target listeners');
+            this.setupTargetEntities();
         });
+        
+        // Also listen for arError event
+        this.scene.addEventListener('arError', (event) => {
+            console.error('❌ MindAR error:', event.detail);
+        });
+        
+        // Create target entities immediately if scene is already ready
+        if (this.mindarSystem && this.mindarSystem.el) {
+            console.log('MindAR system already available, setting up targets now');
+            this.setupTargetEntities();
+        }
+    }
+    
+    setupTargetEntities() {
+        console.log('Creating target entities for', this.emojiLabels.length, 'targets');
+        
+        // Create target entities for each emoji (0-5 for 6 emojis)
+        for (let i = 0; i < this.emojiLabels.length; i++) {
+            const targetEl = document.createElement('a-mindar-image-target');
+            targetEl.setAttribute('targetIndex', i);
+            targetEl.id = `target-${i}`;
+            
+            // Listen for target found/lost events on each target entity
+            targetEl.addEventListener('targetFound', () => {
+                const label = this.emojiLabels[i] || `Target ${i}`;
+                console.log('🎯 Target found:', i, label);
+                
+                this.detectedTargets.set(i, {
+                    targetIndex: i,
+                    label,
+                    confidence: 1.0,
+                    found: true
+                });
+            });
+            
+            targetEl.addEventListener('targetLost', () => {
+                console.log('❌ Target lost:', i);
+                this.detectedTargets.delete(i);
+            });
+            
+            this.scene.appendChild(targetEl);
+            console.log(`✓ Created target entity for index ${i}`);
+        }
     }
 
     /**
