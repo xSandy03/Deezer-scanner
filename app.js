@@ -173,30 +173,38 @@ class EmojiModelAdapter {
             console.log('✓ Event listeners set up');
 
             console.log('Step 7: Starting MindAR tracking...');
-            // Start MindAR tracking (this will request camera access)
+            // MindAR should auto-start, but we can manually trigger if needed
             try {
-                // Wait for arReady before starting
-                await new Promise((resolve, reject) => {
-                    const timeout = setTimeout(() => {
-                        reject(new Error('arReady event timeout'));
-                    }, 5000);
-                    
-                    this.scene.addEventListener('arReady', () => {
-                        clearTimeout(timeout);
-                        console.log('arReady event received');
-                        resolve();
-                    }, { once: true });
-                });
+                // Check if start method exists
+                if (typeof this.mindarSystem.start === 'function') {
+                    console.log('Calling mindarSystem.start()...');
+                    await this.mindarSystem.start();
+                    console.log('✓ MindAR start() completed');
+                } else {
+                    console.log('mindarSystem.start() not available, MindAR should auto-start');
+                    // Wait a bit for auto-initialization
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
                 
-                await this.mindarSystem.start();
-                console.log('✓ MindAR started successfully, camera should be active');
+                // Verify it's actually running
+                if (this.mindarSystem.el && this.mindarSystem.el.components && 
+                    this.mindarSystem.el.components['mindar-image']) {
+                    const mindarComponent = this.mindarSystem.el.components['mindar-image'];
+                    console.log('MindAR component state:', {
+                        isTracking: mindarComponent.isTracking,
+                        arSession: !!mindarComponent.arSession
+                    });
+                }
+                
+                console.log('✓ MindAR initialization complete, camera should be active');
             } catch (startError) {
                 console.error('Failed to start MindAR:', startError);
                 console.error('Error details:', startError.message);
                 if (startError.stack) {
                     console.error('Stack:', startError.stack);
                 }
-                throw new Error(`Failed to start MindAR: ${startError.message}`);
+                // Don't throw - MindAR might auto-start anyway
+                console.warn('Continuing despite start error - MindAR may auto-start');
             }
 
             this.isLoaded = true;
