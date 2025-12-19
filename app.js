@@ -331,6 +331,42 @@ class EmojiModelAdapter {
         // Verify targets were added
         const allTargets = this.scene.querySelectorAll('a-mindar-image-target');
         console.log(`Total target entities in scene: ${allTargets.length}`);
+        
+        // Log target details for debugging
+        allTargets.forEach((target, idx) => {
+            console.log(`Target ${idx}:`, {
+                id: target.id,
+                targetIndex: target.getAttribute('targetIndex'),
+                visible: target.getAttribute('visible'),
+                hasObject3D: !!target.object3D
+            });
+        });
+        
+        // Set up a periodic check to see if any targets become visible
+        setInterval(() => {
+            const visibleTargets = [];
+            allTargets.forEach((targetEl) => {
+                const targetIndex = parseInt(targetEl.getAttribute('targetIndex'));
+                if (targetEl.object3D && targetEl.object3D.visible) {
+                    visibleTargets.push(targetIndex);
+                    // If target is visible but not in detectedTargets, add it
+                    if (!this.detectedTargets.has(targetIndex)) {
+                        const label = this.emojiLabels[targetIndex] || `Target ${targetIndex}`;
+                        console.log(`🔍 Auto-detected visible target: ${targetIndex} (${label})`);
+                        this.detectedTargets.set(targetIndex, {
+                            targetIndex,
+                            label,
+                            confidence: 0.85,
+                            found: true,
+                            timestamp: Date.now()
+                        });
+                    }
+                }
+            });
+            if (visibleTargets.length > 0) {
+                console.log('Currently visible targets:', visibleTargets);
+            }
+        }, 1000); // Check every second
     }
 
     /**
@@ -957,6 +993,8 @@ class AppController {
             this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
             return;
         }
+        
+        console.log('Drawing detections:', detections.map(d => `${d.label} (${d.targetIndex})`));
 
         // Clear previous drawings
         this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
