@@ -167,12 +167,17 @@ a-scene video {
         max-height: 100% !important;
     }
     
+    /* Target all canvas and video elements inside scene */
     #arScene canvas,
     #arScene video,
     a-scene#arScene canvas,
     a-scene#arScene video,
     a-scene canvas,
-    a-scene video {
+    a-scene video,
+    a-scene > canvas,
+    a-scene > video,
+    #arScene > canvas,
+    #arScene > video {
         position: fixed !important;
         top: 0 !important;
         left: 0 !important;
@@ -186,6 +191,12 @@ a-scene video {
         visibility: visible !important;
         opacity: 1 !important;
         display: block !important;
+        background: transparent !important;
+    }
+    
+    /* Ensure app container doesn't hide the scene */
+    .app-container {
+        background-color: transparent !important;
     }
 }
 
