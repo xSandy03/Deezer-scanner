@@ -85,12 +85,36 @@ body {
 
 /* A-Frame Scene - Fullscreen */
 #arScene {
-    position: fixed;
-    top: 0;
-    left: 0;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
     width: 100vw !important;
     height: 100vh !important;
-    background-color: transparent;
+    z-index: 1;
+}
+
+/* A-Frame canvas (camera preview) */
+#arScene canvas {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    object-fit: cover !important;
+    display: block !important;
+    z-index: 1;
+}
+
+/* A-Frame video element (camera stream) */
+#arScene video {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    object-fit: cover !important;
+    display: block !important;
+    z-index: 0;
 }
 
 /* Overlay Canvas for bounding boxes and labels */
