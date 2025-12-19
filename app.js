@@ -57,11 +57,6 @@ class EmojiModelAdapter {
         this.model = null;
         this.isLoaded = false;
         this.emojiLabels = EMOJI_LABELS; // Use labels from config
-        // COCO-SSD class names that might represent cube-like objects
-        this.cubeLikeClasses = [
-            'box', 'bottle', 'book', 'cell phone', 'remote', 'keyboard',
-            'tv', 'laptop', 'mouse', 'clock', 'vase', 'cup', 'bowl'
-        ];
     }
 
     /**
@@ -95,23 +90,6 @@ class EmojiModelAdapter {
         }
     }
 
-    /**
-     * Filter cube-like objects from COCO-SSD detections
-     * @param {Array} detections - COCO-SSD detection results
-     * @returns {Array} Filtered detections for cube-like objects
-     */
-    filterCubeLikeObjects(detections) {
-        // Filter for cube-like objects (or accept all if none match)
-        // COCO-SSD doesn't have a "cube" class, so we accept common box-like objects
-        // Or we can accept all detections and let the classification model decide
-        return detections.filter(detection => {
-            const className = detection.class.toLowerCase();
-            // Accept if it's in our cube-like list, or accept all for now
-            return this.cubeLikeClasses.some(cubeClass => 
-                className.includes(cubeClass.toLowerCase())
-            ) || detections.length <= 2; // If few detections, accept all
-        });
-    }
 
     /**
      * Predict cube-like objects using COCO-SSD and return bounding boxes
@@ -130,17 +108,14 @@ class EmojiModelAdapter {
             // Run COCO-SSD detection
             const detections = await this.model.detect(image);
             
-            // Filter for cube-like objects
-            let filteredDetections = this.filterCubeLikeObjects(detections);
-            
-            // Sort by confidence and limit to top 2
-            filteredDetections = filteredDetections
+            // Sort by confidence score and limit to top 2 highest confidence detections
+            const topDetections = detections
                 .sort((a, b) => b.score - a.score)
-                .slice(0, 2); // Limit to 2 highest confidence detections
+                .slice(0, 2);
             
             // Map COCO-SSD detections to our format with emoji labels
             // For now, we'll use the class name, but you can add classification later
-            const results = filteredDetections.map((detection, index) => {
+            const results = topDetections.map((detection, index) => {
                 // Convert COCO-SSD bbox format (x, y, width, height) to our format
                 const bbox = detection.bbox; // COCO-SSD bbox: [x, y, width, height]
                 
