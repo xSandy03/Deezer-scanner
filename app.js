@@ -1007,40 +1007,40 @@ class AppController {
             return;
         }
 
-        const statusText = detectionCount > 0 
-            ? `${detectionCount} target${detectionCount > 1 ? 's' : ''} detected`
-            : 'No targets detected';
+        // Always show the instruction message
+        const statusText = 'Move camera towards Mood Cubes';
         
-        const statusColor = detectionCount > 0 ? '#4CAF50' : '#FF5722'; // Green if detected, Red if not
-        const bgColor = detectionCount > 0 ? 'rgba(76, 175, 80, 0.9)' : 'rgba(255, 87, 34, 0.9)';
+        // Use Deezer purple color (#A238FF)
+        const textColor = '#A238FF';
         
-        // Draw status at bottom center of screen
-        this.overlayCtx.font = 'bold 20px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+        // Draw status at bottom center of screen with transparent background
+        // Use Deezer-style font (similar to their branding)
+        this.overlayCtx.font = 'bold 24px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
         const textMetrics = this.overlayCtx.measureText(statusText);
         const textWidth = textMetrics.width;
-        const textHeight = 24;
-        const padding = 12;
-        const margin = 20;
+        const textHeight = 28;
+        const padding = 16;
+        const margin = 30;
         
         const x = (this.overlayCanvas.width - textWidth) / 2;
-        const y = this.overlayCanvas.height - margin - textHeight;
+        const y = this.overlayCanvas.height - margin;
         
-        // Draw background rectangle
+        // Draw subtle background rectangle (semi-transparent dark)
         const rectX = x - padding;
         const rectY = y - textHeight - padding;
         const rectWidth = textWidth + (padding * 2);
         const rectHeight = textHeight + (padding * 2);
         
-        this.overlayCtx.fillStyle = bgColor;
+        this.overlayCtx.fillStyle = 'rgba(0, 0, 0, 0.6)';
         if (typeof this.overlayCtx.roundRect === 'function') {
-            this.overlayCtx.roundRect(rectX, rectY, rectWidth, rectHeight, 8);
+            this.overlayCtx.roundRect(rectX, rectY, rectWidth, rectHeight, 12);
             this.overlayCtx.fill();
         } else {
             this.overlayCtx.fillRect(rectX, rectY, rectWidth, rectHeight);
         }
         
-        // Draw status text
-        this.overlayCtx.fillStyle = '#FFFFFF';
+        // Draw status text in Deezer purple
+        this.overlayCtx.fillStyle = textColor;
         this.overlayCtx.fillText(statusText, x, y);
     }
 
