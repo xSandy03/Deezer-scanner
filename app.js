@@ -857,6 +857,8 @@ class AppController {
         this.musicPlayer = new MusicPlayer();
         
         this.overlayCanvas = document.getElementById('overlayCanvas');
+        this.statusIndicator = document.getElementById('statusIndicator');
+        this.statusText = document.getElementById('statusText');
         this.scene = null;
         
         if (!this.overlayCanvas) {
@@ -866,8 +868,27 @@ class AppController {
         
         this.overlayCtx = this.overlayCanvas.getContext('2d');
         this.isDetecting = false;
+        this.lastDetectionCount = 0;
         
         this.init();
+    }
+    
+    /**
+     * Update status indicator
+     */
+    updateStatus(message, status = 'default') {
+        if (this.statusText) {
+            this.statusText.textContent = message;
+        }
+        if (this.statusIndicator) {
+            // Remove all status classes
+            this.statusIndicator.classList.remove('status-ready', 'status-detecting', 'status-error');
+            // Add new status class if not default
+            if (status !== 'default') {
+                this.statusIndicator.classList.add(`status-${status}`);
+            }
+        }
+        console.log('Status:', message, status);
     }
 
     async init() {
@@ -907,17 +928,22 @@ class AppController {
 
         if (!CONFIG.MOCK_MODE) {
             // Step 2: Now initialize MindAR (scene is visible, so camera can be requested)
+            this.updateStatus('Loading AR system...', 'default');
             console.log('Loading MindAR tracking (scene is visible)...');
             const loaded = await this.modelAdapter.loadModel();
             if (loaded) {
                 console.log('MindAR model loaded successfully');
+                this.updateStatus('AR Ready - Point camera at targets', 'ready');
                 // Update emoji labels from config
                 this.modelAdapter.setEmojiLabels(EMOJI_LABELS);
             } else {
                 console.error('Failed to load MindAR model');
+                this.updateStatus('Failed to load AR - Check console', 'error');
                 // Don't block - continue anyway
                 console.log('Continuing without AR tracking');
             }
+        } else {
+            this.updateStatus('Mock Mode Active', 'default');
         }
 
         // Start detection loop
@@ -957,6 +983,17 @@ class AppController {
 
             // Get current detections from MindAR
             const detections = this.modelAdapter.getDetections();
+            
+            // Update status based on detection count
+            if (detections.length !== this.lastDetectionCount) {
+                if (detections.length > 0) {
+                    const labels = detections.map(d => d.label).join(', ');
+                    this.updateStatus(`Detecting: ${labels} (${detections.length} target${detections.length > 1 ? 's' : ''})`, 'detecting');
+                } else {
+                    this.updateStatus('AR Ready - Point camera at targets', 'ready');
+                }
+                this.lastDetectionCount = detections.length;
+            }
             
             if (detections.length > 0) {
                 // Log detections periodically (not every frame)
